@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#050508" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Jarvis</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #050508;
+      color: #e0f0ff;
+      font-family: 'Courier New', monospace;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+      pointer-events: none;
+      z-index: 1;
+    }
+    .corner { position: fixed; width: 40px; height: 40px; border-color: #00d4ff; border-style: solid; opacity: 0.3; }
+    .corner.tl { top: 20px; left: 20px; border-width: 1px 0 0 1px; }
+    .corner.tr { top: 20px; right: 20px; border-width: 1px 1px 0 0; }
+    .corner.bl { bottom: 20px; left: 20px; border-width: 0 0 1px 1px; }
+    .corner.br { bottom: 20px; right: 20px; border-width: 0 1px 1px 0; }
+    .title { font-size: 2rem; letter-spacing: 0.5em; text-transform: uppercase; color: #00d4ff; margin-bottom: 8px; text-shadow: 0 0 20px rgba(0,212,255,0.4); z-index: 2; }
+    .subtitle { font-size: 0.65rem; letter-spacing: 0.2em; color: #4a5568; margin-bottom: 50px; z-index: 2; }
+
+    .orb {
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #1a3a4a, #050508);
+      border: 1px solid rgba(0,212,255,0.2);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.3s ease;
+      box-shadow: 0 0 30px rgba(0,212,255,0.05);
+      z-index: 2;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .orb:hover { box-shadow: 0 0 40px rgba(0,212,255,0.15); }
+    .orb.listening {
+      border-color: rgba(0,212,255,0.8);
+      box-shadow: 0 0 60px rgba(0,212,255,0.3), inset 0 0 30px rgba(0,212,255,0.1);
+      animation: pulse 1.5s infinite;
+    }
+    .orb.thinking {
+      border-color: rgba(255,200,0,0.6);
+      box-shadow: 0 0 40px rgba(255,200,0,0.2);
+      animation: spin-border 1s linear infinite;
+    }
+    .orb.speaking {
+      border-color: rgba(0,255,150,0.6);
+      box-shadow: 0 0 50px rgba(0,255,150,0.2);
+      animation: pulse-green 1s infinite;
+    }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 60px rgba(0,212,255,0.3),inset 0 0 30px rgba(0,212,255,0.1)} 50%{box-shadow:0 0 80px rgba(0,212,255,0.5),inset 0 0 40px rgba(0,212,255,0.15)} }
+    @keyframes pulse-green { 0%,100%{box-shadow:0 0 50px rgba(0,255,150,0.2)} 50%{box-shadow:0 0 70px rgba(0,255,150,0.4)} }
+    @keyframes spin-border { to{transform:rotate(360deg)} }
+
+    .orb-icon { font-size: 2.5rem; pointer-events: none; }
+
+    .status {
+      margin-top: 30px;
+      font-size: 0.7rem;
+      letter-spacing: 0.15em;
+      color: #4a5568;
+      text-transform: uppercase;
+      z-index: 2;
+      min-height: 1.2em;
+    }
+    .status.active { color: #00d4ff; }
+    .status.speaking { color: #00ff96; }
+    .status.thinking { color: #ffc800; }
+
+    .transcript {
+      margin-top: 20px;
+      max-width: 320px;
+      text-align: center;
+      font-size: 0.8rem;
+      color: #6b7280;
+      line-height: 1.6;
+      z-index: 2;
+      min-height: 3em;
+      padding: 0 20px;
+    }
+
+    /* ElevenLabs fallback widget — hidden when using browser voice */
+    .elevenlabs-mode elevenlabs-convai { display: block; z-index: 2; }
+    elevenlabs-convai { display: none; }
+    .elevenlabs-mode .orb, .elevenlabs-mode .status, .elevenlabs-mode .transcript { display: none; }
+  </style>
+</head>
+<body>
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+
+  <div class="title">JARVIS</div>
+  <div class="subtitle">PERSONAL AI ASSISTANT — TROY</div>
+
+  <!-- Browser voice mode (free) -->
+  <div class="orb" id="orb">
+    <span class="orb-icon">🎙️</span>
+  </div>
+  <div class="status" id="status">TAP TO START</div>
+  <div class="transcript" id="transcript"></div>
+
+  <!-- ElevenLabs mode (premium) — swap CONFIG.voice to 'elevenlabs' to enable -->
+  <elevenlabs-convai agent-id="agent_4401kqcb0w2dey28c69zhchv7ayn"></elevenlabs-convai>
+  <script src="https://elevenlabs.io/convai-widget/index.js" async type="text/javascript"></script>
+
+  <script>
+    // ─── CONFIG ──────────────────────────────────────────────────────────────
+    const CONFIG = {
+      voice: 'browser',        // 'browser' (free) | 'elevenlabs' (premium) — flip to elevenlabs when credits added
+      elevenLabsAgentId: 'agent_4401kqcb0w2dey28c69zhchv7ayn',
+      apiEndpoint: '/api/chat' // Vercel serverless function
+    };
+    // ─────────────────────────────────────────────────────────────────────────
+
+    if (CONFIG.voice === 'elevenlabs') {
+      document.body.classList.add('elevenlabs-mode');
+    } else {
+      initBrowserVoice();
+    }
+
+    function initBrowserVoice() {
+      const orb = document.getElementById('orb');
+      const statusEl = document.getElementById('status');
+      const transcriptEl = document.getElementById('transcript');
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        setStatus('BROWSER NOT SUPPORTED — USE CHROME', '');
+        return;
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      let isListening = false;
+      let isSpeaking = false;
+      let sessionActive = false;
+      let history = [];
+
+      const synth = window.speechSynthesis;
+
+      function setStatus(text, state) {
+        statusEl.textContent = text;
+        statusEl.className = 'status' + (state ? ' ' + state : '');
+        orb.className = 'orb' + (state ? ' ' + state : '');
+      }
+
+      function speak(text, onDone) {
+        synth.cancel();
+        const clean = text.replace(/\[ACTION:[^\]]+\]/g, '').trim();
+        if (!clean) { onDone?.(); return; }
+
+        const utter = new SpeechSynthesisUtterance(clean);
+        utter.lang = 'en-US';
+        utter.rate = 1.05;
+        utter.pitch = 1.0;
+
+        const voices = synth.getVoices();
+        const pick = voices.find(v => v.name === 'Google UK English Male')
+          || voices.find(v => v.name.includes('Male') && v.lang.startsWith('en'))
+          || voices.find(v => v.name === 'Microsoft David - English (United States)')
+          || voices.find(v => v.name.includes('David'))
+          || voices.find(v => v.name === 'Google US English')
+          || voices.find(v => v.lang.startsWith('en') && !v.localService)
+          || voices.find(v => v.lang.startsWith('en'));
+        if (pick) utter.voice = pick;
+
+        isSpeaking = true;
+        setStatus('JARVIS SPEAKING', 'speaking');
+        utter.onend = () => {
+          isSpeaking = false;
+          // Stop any lingering recognition before restarting
+          try { recognition.stop(); } catch(e) {}
+          onDone?.();
+        };
+        utter.onerror = () => { isSpeaking = false; onDone?.(); };
+        // Stop listening while speaking to prevent feedback loop
+        try { recognition.stop(); } catch(e) {}
+        synth.speak(utter);
+      }
+
+      function stopSpeaking() {
+        synth.cancel();
+        isSpeaking = false;
+      }
+
+      function handleActions(text) {
+        const actionMatch = text.match(/\[ACTION:(CALL|SMS):([^\]]+)\]/g);
+        if (!actionMatch) return;
+        actionMatch.forEach(action => {
+          const [, type, params] = action.match(/\[ACTION:(CALL|SMS):([^\]]+)\]/);
+          if (type === 'CALL') {
+            window.location.href = 'tel:' + params.replace(/\s/g, '');
+          } else if (type === 'SMS') {
+            const [number, ...msgParts] = params.split(':');
+            const msg = msgParts.join(':');
+            window.location.href = 'sms:' + number.trim() + (msg ? '?body=' + encodeURIComponent(msg) : '');
+          }
+        });
+      }
+
+      function startListening() {
+        if (isListening || isSpeaking) return;
+        try { recognition.start(); } catch(e) {}
+      }
+
+      async function sendToJarvis(userText) {
+        history.push({ role: 'user', content: userText });
+        setStatus('THINKING...', 'thinking');
+        transcriptEl.textContent = '';
+
+        try {
+          const res = await fetch(CONFIG.apiEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: history })
+          });
+          const data = await res.json();
+          const reply = data.reply || 'Sorry, I had trouble with that.';
+          history.push({ role: 'assistant', content: reply });
+          handleActions(reply);
+          speak(reply, () => {
+            // Auto-restart listening after Jarvis finishes speaking
+            if (sessionActive) startListening();
+          });
+        } catch (e) {
+          speak('Connection error.', () => { if (sessionActive) startListening(); });
+        }
+      }
+
+      recognition.onstart = () => { isListening = true; setStatus('LISTENING...', 'listening'); transcriptEl.textContent = ''; };
+      recognition.onend = () => {
+        isListening = false;
+        // Only restart after a delay to prevent picking up Jarvis's own voice
+        if (sessionActive && !isSpeaking) setTimeout(startListening, 800);
+      };
+      recognition.onerror = (e) => {
+        isListening = false;
+        if (e.error === 'not-allowed') { sessionActive = false; setStatus('TAP TO START', ''); }
+        else if (sessionActive && !isSpeaking) startListening();
+      };
+
+      recognition.onresult = (e) => {
+        let interim = '', final = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) final += e.results[i][0].transcript;
+          else interim += e.results[i][0].transcript;
+        }
+        transcriptEl.textContent = final || interim;
+        if (final) sendToJarvis(final.trim());
+      };
+
+      orb.addEventListener('click', () => {
+        if (isSpeaking) {
+          stopSpeaking();
+          if (sessionActive) startListening();
+          return;
+        }
+        if (!sessionActive) {
+          // Start session
+          sessionActive = true;
+          setStatus('SESSION ON — TAP TO END', 'active');
+          startListening();
+        } else {
+          // End session
+          sessionActive = false;
+          recognition.stop();
+          stopSpeaking();
+          history = [];
+          setStatus('TAP TO START', '');
+          transcriptEl.textContent = '';
+        }
+      });
+
+      // Load voices async in Chrome
+      synth.onvoiceschanged = () => synth.getVoices();
+    }
+  </script>
+</body>
+</html>

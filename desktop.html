@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Jarvis — Desktop</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #050508;
+      color: #e0f0ff;
+      font-family: 'Courier New', monospace;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+      pointer-events: none;
+    }
+    .corner { position: fixed; width: 40px; height: 40px; border-color: #00d4ff; border-style: solid; opacity: 0.3; }
+    .corner.tl { top: 20px; left: 20px; border-width: 1px 0 0 1px; }
+    .corner.tr { top: 20px; right: 20px; border-width: 1px 1px 0 0; }
+    .corner.bl { bottom: 20px; left: 20px; border-width: 0 0 1px 1px; }
+    .corner.br { bottom: 20px; right: 20px; border-width: 0 1px 1px 0; }
+    h1 { font-size: 2rem; letter-spacing: 0.5em; color: #00d4ff; text-shadow: 0 0 20px rgba(0,212,255,0.4); margin-bottom: 6px; }
+    .sub { font-size: 0.6rem; letter-spacing: 0.2em; color: #2d3748; margin-bottom: 50px; }
+    .orb {
+      width: 130px; height: 130px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #1a3a4a, #050508);
+      border: 1px solid rgba(0,212,255,0.15);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      box-shadow: 0 0 30px rgba(0,212,255,0.04);
+      font-size: 2.8rem;
+    }
+    .orb.on    { border-color: rgba(0,212,255,0.7); box-shadow: 0 0 60px rgba(0,212,255,0.25), inset 0 0 30px rgba(0,212,255,0.08); }
+    .orb.hear  { border-color: rgba(0,212,255,0.9); box-shadow: 0 0 80px rgba(0,212,255,0.4); animation: pulse 1.2s infinite; }
+    .orb.think { border-color: rgba(255,200,0,0.5); box-shadow: 0 0 50px rgba(255,200,0,0.15); }
+    .orb.talk  { border-color: rgba(0,255,150,0.6); box-shadow: 0 0 60px rgba(0,255,150,0.2); animation: glow 1s infinite; }
+    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+    @keyframes glow  { 0%,100%{box-shadow:0 0 60px rgba(0,255,150,0.2)} 50%{box-shadow:0 0 80px rgba(0,255,150,0.4)} }
+    .status { margin-top: 28px; font-size: 0.68rem; letter-spacing: 0.18em; color: #2d3748; text-transform: uppercase; min-height: 1.2em; }
+    .status.on    { color: #00d4ff; }
+    .status.hear  { color: #00d4ff; }
+    .status.think { color: #ffc800; }
+    .status.talk  { color: #00ff96; }
+    .transcript {
+      margin-top: 18px; max-width: 380px; text-align: center;
+      font-size: 0.78rem; color: #4a5568; line-height: 1.65;
+      min-height: 2.5em; padding: 0 24px;
+    }
+    .hint { position: fixed; bottom: 28px; font-size: 0.58rem; color: #1f2937; letter-spacing: 0.1em; }
+  </style>
+</head>
+<body>
+  <div class="corner tl"></div><div class="corner tr"></div>
+  <div class="corner bl"></div><div class="corner br"></div>
+  <h1>JARVIS</h1>
+  <div class="sub">DESKTOP — CLYDE DIRECT</div>
+  <div class="orb" id="orb">🎙️</div>
+  <div class="status" id="status">TAP TO START</div>
+  <div class="transcript" id="tx"></div>
+  <div class="hint">TAP = START / STOP SESSION &nbsp;|&nbsp; TAP WHILE SPEAKING = INTERRUPT</div>
+
+  <script>
+    const API = 'https://jarvis-troy.vercel.app/api/chat';
+
+    const orb    = document.getElementById('orb');
+    const status = document.getElementById('status');
+    const tx     = document.getElementById('tx');
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { status.textContent = 'USE CHROME'; status.className = 'status'; }
+
+    const rec  = SR ? new SR() : null;
+    const synt = window.speechSynthesis;
+
+    if (rec) {
+      rec.continuous    = false;
+      rec.interimResults = true;
+      rec.lang          = 'en-US';
+    }
+
+    let active    = false;
+    let listening = false;
+    let speaking  = false;
+    let history   = [];
+
+    function setState(s, msg) {
+      status.className = 'status ' + s;
+      status.textContent = msg;
+      orb.className = 'orb ' + s;
+    }
+
+    function getBestVoice() {
+      const vv = synt.getVoices();
+      return vv.find(v => v.name === 'Google UK English Male')
+          || vv.find(v => /male/i.test(v.name) && v.lang.startsWith('en'))
+          || vv.find(v => v.name === 'Microsoft David - English (United States)')
+          || vv.find(v => /david|guy|mark|james/i.test(v.name) && v.lang.startsWith('en'))
+          || vv.find(v => v.lang === 'en-US' && !v.localService)
+          || vv.find(v => v.lang.startsWith('en'));
+    }
+
+    function speak(text, done) {
+      synt.cancel();
+      const clean = text.replace(/\[ACTION:[^\]]+\]/g, '').trim();
+      if (!clean) { done?.(); return; }
+
+      const u = new SpeechSynthesisUtterance(clean);
+      u.rate  = 1.0;
+      u.pitch = 0.95;
+      const v = getBestVoice();
+      if (v) u.voice = v;
+
+      speaking = true;
+      setState('talk', 'JARVIS SPEAKING');
+
+      // Stop mic BEFORE speaking to kill feedback loop
+      try { rec.stop(); } catch (_) {}
+
+      u.onend   = () => { speaking = false; done?.(); };
+      u.onerror = () => { speaking = false; done?.(); };
+      synt.speak(u);
+    }
+
+    function stopSpeaking() {
+      synt.cancel();
+      speaking = false;
+    }
+
+    function startListening() {
+      if (listening || speaking || !rec) return;
+      try { rec.start(); } catch (_) {}
+    }
+
+    async function ask(userText) {
+      history.push({ role: 'user', content: userText });
+      setState('think', 'THINKING...');
+      tx.textContent = '';
+      try {
+        const r = await fetch(API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: history })
+        });
+        const d = await r.json();
+        const reply = d.reply || 'No response.';
+        history.push({ role: 'assistant', content: reply });
+        speak(reply, () => { if (active) setTimeout(startListening, 600); });
+      } catch (e) {
+        speak('Connection error.', () => { if (active) setTimeout(startListening, 600); });
+      }
+    }
+
+    if (rec) {
+      rec.onstart  = () => { listening = true;  setState('hear', 'LISTENING...'); tx.textContent = ''; };
+      rec.onend    = () => {
+        listening = false;
+        if (active && !speaking) setTimeout(startListening, 600);
+      };
+      rec.onerror  = (e) => {
+        listening = false;
+        if (e.error === 'not-allowed') { active = false; setState('', 'MIC BLOCKED'); return; }
+        if (active && !speaking) setTimeout(startListening, 600);
+      };
+      rec.onresult = (e) => {
+        let interim = '', final = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) final += e.results[i][0].transcript;
+          else interim += e.results[i][0].transcript;
+        }
+        tx.textContent = final || interim;
+        if (final) ask(final.trim());
+      };
+    }
+
+    orb.addEventListener('click', () => {
+      if (speaking) { stopSpeaking(); if (active) setTimeout(startListening, 400); return; }
+      if (!active) {
+        active = true;
+        history = [];
+        setState('on', 'SESSION ON — TAP TO END');
+        setTimeout(startListening, 200);
+      } else {
+        active = false;
+        try { rec.stop(); } catch (_) {}
+        stopSpeaking();
+        history = [];
+        setState('', 'TAP TO START');
+        tx.textContent = '';
+      }
+    });
+
+    synt.onvoiceschanged = () => synt.getVoices();
+  </script>
+</body>
+</html>
