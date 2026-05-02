@@ -444,13 +444,16 @@
       }
 
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;
+      // Continuous mode keeps the mic hot through long brain dumps
+      // (prevents the "3-paragraph cutout" issue)
+      recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
 
       let isListening = false;
       let isSpeaking = false;
       let sessionActive = false;
+      let isManualStop = false;
 
       const synth = window.speechSynthesis;
 
@@ -552,15 +555,20 @@
         }
       }
 
-      recognition.onstart = () => { isListening = true; setStatus('LISTENING...', 'listening'); transcriptEl.textContent = ''; };
+      recognition.onstart = () => { isListening = true; isManualStop = false; setStatus('LISTENING...', 'listening'); transcriptEl.textContent = ''; };
       recognition.onend = () => {
         isListening = false;
-        if (sessionActive && !isSpeaking) setTimeout(startListening, 800);
+        // Recursive restart — mic stays hot during long brain dumps
+        if (!isManualStop && sessionActive && !isSpeaking) {
+          setTimeout(startListening, 100);
+        }
       };
       recognition.onerror = (e) => {
         isListening = false;
-        if (e.error === 'not-allowed') { sessionActive = false; setStatus('TAP TO START', ''); }
-        else if (sessionActive && !isSpeaking) startListening();
+        if (e.error === 'not-allowed') { sessionActive = false; isManualStop = true; setStatus('TAP TO START', ''); }
+        else if (!isManualStop && sessionActive && !isSpeaking) {
+          setTimeout(startListening, 200);
+        }
       };
 
       recognition.onresult = (e) => {
@@ -585,7 +593,8 @@
           startListening();
         } else {
           sessionActive = false;
-          recognition.stop();
+          isManualStop = true;
+          try { recognition.stop(); } catch (e) {}
           stopSpeaking();
           // Keep history in localStorage; don't wipe on session end
           setStatus('TAP TO START', '');
