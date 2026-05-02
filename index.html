@@ -501,18 +501,7 @@
     };
 
     function decideVoiceMode(user) {
-      // ─── DEMO MODE TOGGLE ──────────────────────────────────────────
-      // When true: all users (including Derek) get ElevenLabs widget — no beep,
-      // premium voice, "Start a call" button. Trade-off: conversation data
-      // does NOT flow through our /api/chat endpoint, so /api/research-log
-      // captures nothing for non-Troy users. Phase 2 bridge (ElevenLabs Convai
-      // webhook → /api/research-log) will close that gap.
-      //
-      // To revert (give non-Troy users browser voice + beep + working research):
-      // set DEMO_MODE_ELEVENLABS_FOR_ALL to false, commit, push.
-      const DEMO_MODE_ELEVENLABS_FOR_ALL = true;
-
-      if (DEMO_MODE_ELEVENLABS_FOR_ALL) return 'elevenlabs';
+      // Troy gets premium ElevenLabs by default; everyone else gets browser
       if (user?.name && user.name.toLowerCase() === 'troy') return 'elevenlabs';
       return 'browser';
     }
