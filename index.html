@@ -277,8 +277,8 @@
   <!-- Footer disclosure -->
   <div class="footer-note" id="footerNote"></div>
 
-  <!-- ElevenLabs mode (premium) — Troy uses this; new users default to browser -->
-  <elevenlabs-convai agent-id="agent_4401kqcb0w2dey28c69zhchv7ayn"></elevenlabs-convai>
+  <!-- ElevenLabs mode (premium) — agent-id is set dynamically per user in initApp() -->
+  <elevenlabs-convai id="convai-widget"></elevenlabs-convai>
   <script src="https://elevenlabs.io/convai-widget/index.js" async type="text/javascript"></script>
 
   <script>
@@ -493,17 +493,29 @@
     }, 60000);
 
     // ─── CONFIG ──────────────────────────────────────────────────────
+    // Per-user ElevenLabs agent routing. Each agent has its voice + system prompt
+    // baked in on the ElevenLabs side; we pick the right one based on identity.
+    const ELEVENLABS_AGENTS = {
+      troy:  'agent_4401kqcb0w2dey28c69zhchv7ayn',  // Jarvis (Troy's profile)
+      derek: 'agent_6101kqmsrna0e2vtvs55y4e2krxm',  // Jarvis-Guest (Derek's profile)
+    };
+    const ELEVENLABS_AGENT_DEFAULT = 'agent_6101kqmsrna0e2vtvs55y4e2krxm'; // Jarvis-Guest = neutral fallback
+
     const CONFIG = {
-      // Default to ElevenLabs for Troy specifically; new users get browser voice
-      voice: 'browser',
-      elevenLabsAgentId: 'agent_4401kqcb0w2dey28c69zhchv7ayn',
+      voice: 'elevenlabs',          // everyone gets premium voice now
+      elevenLabsAgentId: null,      // resolved per-user in initApp()
       apiEndpoint: '/api/chat'
     };
 
-    function decideVoiceMode(user) {
-      // Troy gets premium ElevenLabs by default; everyone else gets browser
-      if (user?.name && user.name.toLowerCase() === 'troy') return 'elevenlabs';
-      return 'browser';
+    function decideAgentId(user) {
+      const key = (user?.name || '').toLowerCase();
+      return ELEVENLABS_AGENTS[key] || ELEVENLABS_AGENT_DEFAULT;
+    }
+
+    function decideVoiceMode(_user) {
+      // Premium for everyone — Troy has his own agent, Derek has Jarvis-Guest,
+      // unknown users fall back to Jarvis-Guest. No more browser-TTS fallback.
+      return 'elevenlabs';
     }
 
     // ─── App init ─────────────────────────────────────────────────────
@@ -514,10 +526,12 @@
 
       const mode = decideVoiceMode(user);
       CONFIG.voice = mode;
+      CONFIG.elevenLabsAgentId = decideAgentId(user);
 
       if (mode === 'elevenlabs') {
         document.body.classList.add('elevenlabs-mode');
-        // ElevenLabs mode is its own widget; multi-tenant context is Phase 2 there
+        const widget = document.getElementById('convai-widget');
+        if (widget) widget.setAttribute('agent-id', CONFIG.elevenLabsAgentId);
       } else {
         initBrowserVoice();
       }
