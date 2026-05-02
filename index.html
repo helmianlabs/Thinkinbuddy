@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#050508" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Jarvis</title>
+  <title>ThinkBuddy</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -33,7 +33,7 @@
     .corner.bl { bottom: 20px; left: 20px; border-width: 0 0 1px 1px; }
     .corner.br { bottom: 20px; right: 20px; border-width: 0 1px 1px 0; }
     .title { font-size: 2rem; letter-spacing: 0.5em; text-transform: uppercase; color: #00d4ff; margin-bottom: 8px; text-shadow: 0 0 20px rgba(0,212,255,0.4); z-index: 2; }
-    .subtitle { font-size: 0.65rem; letter-spacing: 0.2em; color: #4a5568; margin-bottom: 50px; z-index: 2; }
+    .subtitle { font-size: 0.65rem; letter-spacing: 0.2em; color: #4a5568; margin-bottom: 50px; z-index: 2; text-align: center; padding: 0 20px; }
 
     .orb {
       width: 120px; height: 120px;
@@ -95,6 +95,95 @@
       padding: 0 20px;
     }
 
+    /* ─── Onboarding overlay ─────────────────────────────────────── */
+    .onboarding {
+      position: fixed; inset: 0;
+      background: rgba(5,5,8,0.95);
+      backdrop-filter: blur(8px);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 100;
+      padding: 20px;
+      text-align: center;
+    }
+    .onboarding.hidden { display: none; }
+    .onboarding h1 {
+      font-size: 1.5rem; letter-spacing: 0.3em; color: #00d4ff;
+      margin-bottom: 12px; text-shadow: 0 0 15px rgba(0,212,255,0.4);
+    }
+    .onboarding p {
+      font-size: 0.95rem; color: #a0aec0; max-width: 380px;
+      line-height: 1.6; margin-bottom: 28px;
+    }
+    .onboarding input {
+      background: rgba(0,212,255,0.05);
+      border: 1px solid rgba(0,212,255,0.3);
+      color: #e0f0ff;
+      padding: 14px 18px;
+      font-family: 'Courier New', monospace;
+      font-size: 1rem;
+      width: 280px;
+      max-width: 90vw;
+      border-radius: 4px;
+      outline: none;
+      text-align: center;
+      letter-spacing: 0.05em;
+    }
+    .onboarding input:focus { border-color: rgba(0,212,255,0.7); box-shadow: 0 0 15px rgba(0,212,255,0.2); }
+    .onboarding button {
+      margin-top: 20px;
+      background: rgba(0,212,255,0.1);
+      border: 1px solid rgba(0,212,255,0.5);
+      color: #00d4ff;
+      padding: 12px 32px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+    }
+    .onboarding button:hover { background: rgba(0,212,255,0.2); box-shadow: 0 0 20px rgba(0,212,255,0.3); }
+    .onboarding-consent {
+      margin-top: 24px; max-width: 380px;
+      font-size: 0.7rem; color: #6b7280; line-height: 1.5;
+      display: flex; align-items: flex-start; gap: 8px; text-align: left;
+    }
+    .onboarding-consent input { width: auto; padding: 0; margin-top: 3px; flex-shrink: 0; }
+    .onboarding-consent label { cursor: pointer; }
+
+    /* ─── Top-right action buttons ─────────────────────────────────── */
+    .actions {
+      position: fixed; top: 70px; right: 20px;
+      display: flex; flex-direction: column; gap: 8px;
+      z-index: 5;
+    }
+    .actions button {
+      background: rgba(0,212,255,0.05);
+      border: 1px solid rgba(0,212,255,0.25);
+      color: #a0aec0;
+      padding: 8px 14px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 3px;
+      transition: all 0.2s ease;
+    }
+    .actions button:hover { color: #00d4ff; border-color: rgba(0,212,255,0.5); background: rgba(0,212,255,0.1); }
+
+    /* ─── Footer notice ─────────────────────────────────────────────── */
+    .footer-note {
+      position: fixed; bottom: 50px; left: 0; right: 0;
+      text-align: center;
+      font-size: 0.55rem; color: #4a5568;
+      letter-spacing: 0.05em; padding: 0 30px;
+      z-index: 2;
+    }
+    .footer-note a { color: #6b7280; text-decoration: underline; cursor: pointer; }
+    .footer-note a:hover { color: #00d4ff; }
+
     /* ElevenLabs fallback widget — hidden when using browser voice */
     .elevenlabs-mode elevenlabs-convai { display: block; z-index: 2; }
     elevenlabs-convai { display: none; }
@@ -102,13 +191,33 @@
   </style>
 </head>
 <body>
+  <!-- Onboarding overlay (shown on first visit) -->
+  <div class="onboarding hidden" id="onboarding">
+    <h1>THINKBUDDY</h1>
+    <p>Hi. I'm your AI thinking partner. Brain dump, problem-solve, or just talk it out — I'll keep up.</p>
+    <p style="margin-bottom:18px;">What should I call you?</p>
+    <input type="text" id="onboardName" placeholder="Your first name" autocomplete="off" />
+    <div class="onboarding-consent">
+      <input type="checkbox" id="onboardConsent" />
+      <label for="onboardConsent">I'm okay with anonymized conversations being saved to help improve this app and for research on AI-assisted thinking. I can opt out anytime.</label>
+    </div>
+    <button id="onboardSubmit">Continue</button>
+  </div>
+
+  <!-- Background corners + title -->
   <div class="corner tl"></div>
   <div class="corner tr"></div>
   <div class="corner bl"></div>
   <div class="corner br"></div>
 
   <div class="title">JARVIS</div>
-  <div class="subtitle">PERSONAL AI ASSISTANT — TROY</div>
+  <div class="subtitle" id="subtitle">PERSONAL AI ASSISTANT</div>
+
+  <!-- Top-right actions -->
+  <div class="actions">
+    <button id="exportBtn" title="Download this conversation">↓ Export</button>
+    <button id="resetBtn" title="Sign out / new user">⟲ Reset</button>
+  </div>
 
   <!-- Browser voice mode (free) -->
   <div class="orb" id="orb">
@@ -117,25 +226,212 @@
   <div class="status" id="status">TAP TO START</div>
   <div class="transcript" id="transcript"></div>
 
-  <!-- ElevenLabs mode (premium) — swap CONFIG.voice to 'elevenlabs' to enable -->
+  <!-- Footer disclosure -->
+  <div class="footer-note" id="footerNote"></div>
+
+  <!-- ElevenLabs mode (premium) — Troy uses this; new users default to browser -->
   <elevenlabs-convai agent-id="agent_4401kqcb0w2dey28c69zhchv7ayn"></elevenlabs-convai>
   <script src="https://elevenlabs.io/convai-widget/index.js" async type="text/javascript"></script>
 
   <script>
-    // ─── CONFIG ──────────────────────────────────────────────────────────────
-    const CONFIG = {
-      voice: 'elevenlabs',     // 'browser' (free) | 'elevenlabs' (premium) — credits added 2026-05-01
-      elevenLabsAgentId: 'agent_4401kqcb0w2dey28c69zhchv7ayn',
-      apiEndpoint: '/api/chat' // Vercel serverless function
-    };
-    // ─────────────────────────────────────────────────────────────────────────
+    // ─── User management (localStorage) ───────────────────────────────
+    const STORAGE_KEY = 'thinkbuddy_user_v1';
+    const HISTORY_KEY = 'thinkbuddy_history_v1';
 
-    if (CONFIG.voice === 'elevenlabs') {
-      document.body.classList.add('elevenlabs-mode');
-    } else {
-      initBrowserVoice();
+    function loadUser() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); }
+      catch (e) { return null; }
+    }
+    function saveUser(u) { localStorage.setItem(STORAGE_KEY, JSON.stringify(u)); }
+    function loadHistory() {
+      try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+      catch (e) { return []; }
+    }
+    function saveHistory(h) { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); }
+    function clearAll() {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(HISTORY_KEY);
+    }
+    function genUserId() {
+      return 'u_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
     }
 
+    // ─── Onboarding flow ──────────────────────────────────────────────
+    const onboardingEl = document.getElementById('onboarding');
+    const onboardNameEl = document.getElementById('onboardName');
+    const onboardConsentEl = document.getElementById('onboardConsent');
+    const onboardSubmitEl = document.getElementById('onboardSubmit');
+
+    function showOnboarding() {
+      onboardingEl.classList.remove('hidden');
+      setTimeout(() => onboardNameEl.focus(), 100);
+    }
+    function hideOnboarding() { onboardingEl.classList.add('hidden'); }
+
+    onboardSubmitEl.addEventListener('click', completeOnboarding);
+    onboardNameEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') completeOnboarding();
+    });
+
+    function completeOnboarding() {
+      const name = onboardNameEl.value.trim();
+      if (!name) { onboardNameEl.focus(); return; }
+      const consent = onboardConsentEl.checked;
+      const user = {
+        userId: genUserId(),
+        name,
+        consentResearch: consent,
+        consentDate: consent ? new Date().toISOString() : null,
+        firstVisit: true,
+        createdAt: new Date().toISOString(),
+        notes: []
+      };
+      saveUser(user);
+      saveHistory([]);
+      hideOnboarding();
+      initApp(user);
+    }
+
+    // ─── App state ────────────────────────────────────────────────────
+    let currentUser = null;
+    let currentHistory = [];
+
+    const subtitleEl = document.getElementById('subtitle');
+    const footerNoteEl = document.getElementById('footerNote');
+
+    function refreshChrome() {
+      if (!currentUser) return;
+      subtitleEl.textContent = `PERSONAL AI ASSISTANT — ${currentUser.name.toUpperCase()}`;
+      const consentText = currentUser.consentResearch
+        ? `Conversations may be saved for research as previously discussed. <a id="optoutLink">Opt out</a>`
+        : `<a id="optinLink">Enable research mode</a>`;
+      footerNoteEl.innerHTML = consentText;
+      const optout = document.getElementById('optoutLink');
+      const optin = document.getElementById('optinLink');
+      if (optout) optout.addEventListener('click', () => {
+        currentUser.consentResearch = false;
+        saveUser(currentUser);
+        refreshChrome();
+      });
+      if (optin) optin.addEventListener('click', () => {
+        if (confirm('Enable research mode? Your conversations will be saved (anonymized) to help improve this app and for research on AI-assisted thinking.')) {
+          currentUser.consentResearch = true;
+          currentUser.consentDate = new Date().toISOString();
+          saveUser(currentUser);
+          refreshChrome();
+        }
+      });
+    }
+
+    // ─── Export ───────────────────────────────────────────────────────
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      if (!currentHistory || currentHistory.length === 0) {
+        alert('Nothing to export yet — start a conversation first.');
+        return;
+      }
+      const date = new Date().toISOString().slice(0, 10);
+      const userName = currentUser?.name || 'Session';
+      let md = `# ThinkBuddy session — ${userName} — ${date}\n\n`;
+      for (const msg of currentHistory) {
+        const role = msg.role === 'user' ? userName : 'Jarvis';
+        const cleanContent = (msg.content || '').replace(/\[ACTION:[^\]]+\]/g, '').trim();
+        md += `**${role}:** ${cleanContent}\n\n`;
+      }
+      const blob = new Blob([md], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `thinkbuddy-${userName.toLowerCase()}-${date}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    // ─── Reset (sign out / new user) ──────────────────────────────────
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      if (confirm('Sign out and start fresh? Your local history will be cleared.')) {
+        clearAll();
+        location.reload();
+      }
+    });
+
+    // ─── Research logging (only fires if consented) ───────────────────
+    async function logResearchSnapshot() {
+      if (!currentUser?.consentResearch) return;
+      if (!currentHistory || currentHistory.length === 0) return;
+      try {
+        await fetch('/api/research-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversation: currentHistory,
+            userContext: {
+              userId: currentUser.userId,
+              name: currentUser.name,
+              consentDate: currentUser.consentDate,
+              researchTag: 'general'
+            },
+            consentResearch: true
+          })
+        });
+      } catch (e) { /* silent — don't disrupt UX */ }
+    }
+    // Periodic save of consented sessions (every 60 seconds if conversation grew)
+    let lastLoggedLength = 0;
+    setInterval(() => {
+      if (currentHistory.length > lastLoggedLength) {
+        logResearchSnapshot();
+        lastLoggedLength = currentHistory.length;
+      }
+    }, 60000);
+
+    // ─── CONFIG ──────────────────────────────────────────────────────
+    const CONFIG = {
+      // Default to ElevenLabs for Troy specifically; new users get browser voice
+      voice: 'browser',
+      elevenLabsAgentId: 'agent_4401kqcb0w2dey28c69zhchv7ayn',
+      apiEndpoint: '/api/chat'
+    };
+
+    function decideVoiceMode(user) {
+      // Troy gets premium ElevenLabs by default; everyone else gets browser
+      if (user?.name && user.name.toLowerCase() === 'troy') return 'elevenlabs';
+      return 'browser';
+    }
+
+    // ─── App init ─────────────────────────────────────────────────────
+    function initApp(user) {
+      currentUser = user;
+      currentHistory = loadHistory();
+      refreshChrome();
+
+      const mode = decideVoiceMode(user);
+      CONFIG.voice = mode;
+
+      if (mode === 'elevenlabs') {
+        document.body.classList.add('elevenlabs-mode');
+        // ElevenLabs mode is its own widget; multi-tenant context is Phase 2 there
+      } else {
+        initBrowserVoice();
+      }
+
+      // Mark first visit done
+      if (user.firstVisit) {
+        user.firstVisit = false;
+        saveUser(user);
+      }
+    }
+
+    // ─── Boot ─────────────────────────────────────────────────────────
+    const existingUser = loadUser();
+    if (!existingUser) {
+      showOnboarding();
+    } else {
+      initApp(existingUser);
+    }
+
+    // ─── Browser voice mode (multi-tenant aware) ──────────────────────
     function initBrowserVoice() {
       const orb = document.getElementById('orb');
       const statusEl = document.getElementById('status');
@@ -155,7 +451,6 @@
       let isListening = false;
       let isSpeaking = false;
       let sessionActive = false;
-      let history = [];
 
       const synth = window.speechSynthesis;
 
@@ -189,12 +484,10 @@
         setStatus('JARVIS SPEAKING', 'speaking');
         utter.onend = () => {
           isSpeaking = false;
-          // Stop any lingering recognition before restarting
           try { recognition.stop(); } catch(e) {}
           onDone?.();
         };
         utter.onerror = () => { isSpeaking = false; onDone?.(); };
-        // Stop listening while speaking to prevent feedback loop
         try { recognition.stop(); } catch(e) {}
         synth.speak(utter);
       }
@@ -208,7 +501,9 @@
         const actionMatch = text.match(/\[ACTION:(CALL|SMS):([^\]]+)\]/g);
         if (!actionMatch) return;
         actionMatch.forEach(action => {
-          const [, type, params] = action.match(/\[ACTION:(CALL|SMS):([^\]]+)\]/);
+          const m = action.match(/\[ACTION:(CALL|SMS):([^\]]+)\]/);
+          if (!m) return;
+          const [, type, params] = m;
           if (type === 'CALL') {
             window.location.href = 'tel:' + params.replace(/\s/g, '');
           } else if (type === 'SMS') {
@@ -225,7 +520,8 @@
       }
 
       async function sendToJarvis(userText) {
-        history.push({ role: 'user', content: userText });
+        currentHistory.push({ role: 'user', content: userText });
+        saveHistory(currentHistory);
         setStatus('THINKING...', 'thinking');
         transcriptEl.textContent = '';
 
@@ -233,14 +529,22 @@
           const res = await fetch(CONFIG.apiEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: history })
+            body: JSON.stringify({
+              messages: currentHistory,
+              userContext: {
+                userId: currentUser?.userId,
+                name: currentUser?.name,
+                notes: currentUser?.notes || [],
+                firstVisit: currentUser?.firstVisit || false
+              }
+            })
           });
           const data = await res.json();
           const reply = data.reply || 'Sorry, I had trouble with that.';
-          history.push({ role: 'assistant', content: reply });
+          currentHistory.push({ role: 'assistant', content: reply });
+          saveHistory(currentHistory);
           handleActions(reply);
           speak(reply, () => {
-            // Auto-restart listening after Jarvis finishes speaking
             if (sessionActive) startListening();
           });
         } catch (e) {
@@ -251,7 +555,6 @@
       recognition.onstart = () => { isListening = true; setStatus('LISTENING...', 'listening'); transcriptEl.textContent = ''; };
       recognition.onend = () => {
         isListening = false;
-        // Only restart after a delay to prevent picking up Jarvis's own voice
         if (sessionActive && !isSpeaking) setTimeout(startListening, 800);
       };
       recognition.onerror = (e) => {
@@ -277,22 +580,21 @@
           return;
         }
         if (!sessionActive) {
-          // Start session
           sessionActive = true;
           setStatus('SESSION ON — TAP TO END', 'active');
           startListening();
         } else {
-          // End session
           sessionActive = false;
           recognition.stop();
           stopSpeaking();
-          history = [];
+          // Keep history in localStorage; don't wipe on session end
           setStatus('TAP TO START', '');
           transcriptEl.textContent = '';
+          // Final research snapshot for consented users
+          logResearchSnapshot();
         }
       });
 
-      // Load voices async in Chrome
       synth.onvoiceschanged = () => synth.getVoices();
     }
   </script>
