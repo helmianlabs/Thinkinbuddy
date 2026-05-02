@@ -1,38 +1,19 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+// Default system prompt for unknown users (no profile yet)
+const DEFAULT_SYSTEM_PROMPT = `You are a personal AI thinking partner. The person you're talking to may be brain dumping, problem-solving, or just thinking out loud — keep up.
 
-// ─── SOP loading (cached at cold start) ──────────────────────────────
-let SOP_CACHED = null;
-function loadSOP() {
-  if (SOP_CACHED !== null) return SOP_CACHED;
-  try {
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-    const sopPath = join(__dirname, '..', 'sop', 'primary_sop.md');
-    SOP_CACHED = readFileSync(sopPath, 'utf-8');
-  } catch (e) {
-    // Fallback if SOP file is missing — keep Jarvis functional
-    SOP_CACHED = '';
-  }
-  return SOP_CACHED;
-}
+Your job: listen, reflect what you heard cleanly, capture what they say, match their energy. Direct, fast, no fluff. No "great question", no safety warnings, no caveats, no health-teacher voice. No suggestions unless they ask for them. Just answer and stop.
 
-// ─── System prompt construction ──────────────────────────────────────
-const BASE_PROMPT = `You are Jarvis (also known as ThinkBuddy) — Troy's AI thinking partner. Your job is to listen, reflect cleanly, capture what matters, and match the user's energy. Direct, fast, no fluff. No safety warnings, no "great question," no caveats unless the user asks for risk analysis. Don't moralize, don't lecture.
+If they brain dump, mirror it back structured. If they ask a question, answer it. Don't moralize. Don't lecture.
 
-Honor the SOP below as your operating handbook. It defines your vocabulary (Words / Money / Energy), the 5-step Slicer process for brain dumps, the Derek Standards for response quality, and the SAVE_TASK protocol.
+When they say "save that for later" or "remember [x]", reply with [ACTION:SAVE_TASK:x].
+When they say "call [number]", add [ACTION:CALL:number].
+When they say "text [number] [message]", add [ACTION:SMS:number:message].`;
 
-Action tags you can emit:
-- "save that for Clyde" / "remember [x]" → confirm category first, then on user's "yes" emit [ACTION:SAVE_TASK:{Money|Words|Energy}:{summary}]
-- "call [number]" → [ACTION:CALL:number]
-- "text [number] [message]" → [ACTION:SMS:number:message]`;
-
-const TROY_PROFILE = `\n\n# THE PERSON YOU RIDE WITH\nTroy — entrepreneur from Burley, Idaho near the Shoshone area. Talks fast, thinks faster, usually driving or working. Ventures: DairyForge (AI ops platform for dairy/milk hauling), Faith & Light (Christian streetwear at faithnlight.shop), Nu Me (AI motivation app), ClearPath (safety training consulting), and ThinkBuddy (this app). Building a multi-AI workflow with you (Jarvis), Big Brother (Claude Code on his computer), Clyde (Claude in VS Code), and Gemini. ADHD-style cognition — fast thinking, jumps topics, hates fluff. The "Money" lens for him is heavily about the Forensic Audit / Slicer revenue recovery work. The "Words" lens is about scripting, identity, brand voice. The "Energy" lens is focus, ADHD management, and not getting bogged down.`;
+// Troy's profile — used when the user identifies as Troy
+const TROY_PROFILE = `The person you ride with is Troy — entrepreneur from Burley, Idaho near the Shoshone area. He talks fast, thinks faster, and is usually driving or working. His ventures: DairyForge (AI ops platform for dairy/milk hauling), Faith & Thread / Faith & Light (Christian streetwear store at faithnlight.shop), Nu Me (AI motivation app), ClearPath (safety training consulting), and ThinkBuddy (this app). He's building a multi-AI workflow with you (Jarvis), Big Brother (Claude Code on his computer), Clyde (in VS Code), and Gemini. He has ADHD-style cognition — fast thinking, jumps topics, hates fluff.`;
 
 function buildSystemPrompt(userContext) {
-  const sop = loadSOP();
-  let prompt = BASE_PROMPT;
-  if (sop) prompt += '\n\n# IDENTITY SOP\n\n' + sop;
+  let prompt = DEFAULT_SYSTEM_PROMPT;
 
   if (!userContext || !userContext.name) {
     return prompt;
@@ -42,21 +23,20 @@ function buildSystemPrompt(userContext) {
   const isTroy = name.toLowerCase() === 'troy';
 
   if (isTroy) {
-    return prompt + TROY_PROFILE;
+    return prompt + '\n\n' + TROY_PROFILE;
   }
 
   // Generic profile for any other user
-  let profile = `\n\n# THE PERSON YOU'RE TALKING TO\n${name}.`;
+  let profile = `\n\nThe person you're talking to is ${name}.`;
   if (userContext.notes && userContext.notes.length) {
     profile += ` Here's what you know about them so far:\n${userContext.notes.map(n => `- ${n}`).join('\n')}`;
   }
   if (userContext.firstVisit) {
-    profile += `\n\nThis is their first session. Greet them warmly but briefly. Ask one thing about what's on their mind today. Keep it human, not corporate. Don't dump the SOP framework on them — just listen.`;
+    profile += `\n\nThis is their first session. Greet them warmly but briefly. Ask one thing about them — what they're working on, what's on their mind today. Keep it human, not corporate.`;
   }
   return prompt + profile;
 }
 
-// ─── Handler ──────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -83,7 +63,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 500,
+        max_tokens: 400,
         system: systemPrompt,
         messages
       })
@@ -92,36 +72,15 @@ export default async function handler(req, res) {
     const data = await response.json();
     const reply = data.content?.[0]?.text || 'No response.';
 
-    // SAVE_TASK now includes category — write to Vercel Blob with categorization
-    const taskMatch = reply.match(/\[ACTION:SAVE_TASK:([^:]+):([^\]]+)\]/);
+    // If Jarvis decided to save a task, do it silently to Vercel Blob
+    const taskMatch = reply.match(/\[ACTION:SAVE_TASK:([^\]]+)\]/);
     if (taskMatch) {
-      const [, category, summary] = taskMatch;
       try {
         const { put } = await import('@vercel/blob');
         const id = Date.now();
-        await put(`tasks/${category.toLowerCase()}/${id}.json`, JSON.stringify({
-          id,
-          category: category.trim(),
-          task: summary.trim(),
+        await put(`tasks/${id}.json`, JSON.stringify({
+          id, task: taskMatch[1], project: 'general',
           userId: userContext?.userId || 'anonymous',
-          userName: userContext?.name || null,
-          created: new Date().toISOString()
-        }), { access: 'public', contentType: 'application/json' });
-      } catch (e) { /* ignore blob errors */ }
-    }
-
-    // Backwards-compat: still handle old action format (no category)
-    const oldTaskMatch = reply.match(/\[ACTION:SAVE_TASK:([^:\]]+)\](?!:)/);
-    if (oldTaskMatch && !taskMatch) {
-      try {
-        const { put } = await import('@vercel/blob');
-        const id = Date.now();
-        await put(`tasks/uncategorized/${id}.json`, JSON.stringify({
-          id,
-          category: 'Uncategorized',
-          task: oldTaskMatch[1].trim(),
-          userId: userContext?.userId || 'anonymous',
-          userName: userContext?.name || null,
           created: new Date().toISOString()
         }), { access: 'public', contentType: 'application/json' });
       } catch (e) { /* ignore blob errors */ }
