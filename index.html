@@ -173,6 +173,40 @@
     }
     .actions button:hover { color: #00d4ff; border-color: rgba(0,212,255,0.5); background: rgba(0,212,255,0.1); }
 
+    /* ─── Settings panel (voice picker) ─────────────────────────────── */
+    .settings-panel {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(5,5,8,0.97); backdrop-filter: blur(8px);
+      border: 1px solid rgba(0,212,255,0.4);
+      padding: 24px; border-radius: 6px;
+      z-index: 50; min-width: 320px; max-width: 90vw;
+      box-shadow: 0 0 40px rgba(0,212,255,0.2);
+    }
+    .settings-panel.hidden { display: none; }
+    .settings-panel h2 {
+      font-size: 0.9rem; letter-spacing: 0.3em; color: #00d4ff;
+      margin-bottom: 16px; text-transform: uppercase;
+    }
+    .settings-panel label {
+      display: block; font-size: 0.65rem; letter-spacing: 0.1em;
+      color: #a0aec0; text-transform: uppercase; margin-bottom: 6px;
+    }
+    .settings-panel select {
+      width: 100%; padding: 10px;
+      background: rgba(0,212,255,0.05); border: 1px solid rgba(0,212,255,0.3);
+      color: #e0f0ff; font-family: 'Courier New', monospace; font-size: 0.85rem;
+      border-radius: 3px; outline: none; margin-bottom: 18px;
+    }
+    .settings-panel .row { display: flex; gap: 8px; justify-content: flex-end; }
+    .settings-panel button {
+      background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.4);
+      color: #00d4ff; padding: 8px 16px; font-family: 'Courier New', monospace;
+      font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase;
+      cursor: pointer; border-radius: 3px;
+    }
+    .settings-panel button.secondary { color: #6b7280; border-color: rgba(107,114,128,0.4); background: transparent; }
+    .settings-panel .test-line { font-size: 0.7rem; color: #6b7280; margin-bottom: 12px; }
+
     /* ─── Footer notice ─────────────────────────────────────────────── */
     .footer-note {
       position: fixed; bottom: 50px; left: 0; right: 0;
@@ -215,8 +249,22 @@
 
   <!-- Top-right actions -->
   <div class="actions">
+    <button id="settingsBtn" title="Voice and other settings">⚙ Voice</button>
     <button id="exportBtn" title="Download this conversation">↓ Export</button>
     <button id="resetBtn" title="Sign out / new user">⟲ Reset</button>
+  </div>
+
+  <!-- Settings panel (voice picker) -->
+  <div class="settings-panel hidden" id="settingsPanel">
+    <h2>Voice Settings</h2>
+    <label for="voiceSelect">Choose a voice</label>
+    <select id="voiceSelect"></select>
+    <div class="test-line">Tip: iPhones / iOS have better default voices than Android. Try the ones with "Siri" or "Daniel" or "Aaron" in the name if available.</div>
+    <div class="row">
+      <button class="secondary" id="settingsClose">Close</button>
+      <button id="settingsTest">Test</button>
+      <button id="settingsSave">Save</button>
+    </div>
   </div>
 
   <!-- Browser voice mode (free) -->
@@ -356,6 +404,64 @@
       }
     });
 
+    // ─── Settings panel (voice picker) ────────────────────────────────
+    const settingsPanelEl = document.getElementById('settingsPanel');
+    const voiceSelectEl = document.getElementById('voiceSelect');
+
+    function populateVoices() {
+      const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+      voiceSelectEl.innerHTML = '';
+      if (!voices.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '(No voices loaded yet — try opening this menu again in a sec)';
+        voiceSelectEl.appendChild(opt);
+        return;
+      }
+      // Filter to English voices first
+      const english = voices.filter(v => v.lang.startsWith('en'));
+      const list = english.length ? english : voices;
+      list.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.name;
+        opt.textContent = `${v.name} (${v.lang})${v.localService ? '' : ' — cloud'}`;
+        if (currentUser && v.name === currentUser.preferredVoice) opt.selected = true;
+        voiceSelectEl.appendChild(opt);
+      });
+    }
+
+    if (window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = populateVoices;
+    }
+
+    document.getElementById('settingsBtn').addEventListener('click', () => {
+      populateVoices();
+      settingsPanelEl.classList.remove('hidden');
+    });
+
+    document.getElementById('settingsClose').addEventListener('click', () => {
+      settingsPanelEl.classList.add('hidden');
+    });
+
+    document.getElementById('settingsTest').addEventListener('click', () => {
+      if (!window.speechSynthesis) return;
+      const voiceName = voiceSelectEl.value;
+      const voices = window.speechSynthesis.getVoices();
+      const pick = voices.find(v => v.name === voiceName);
+      const u = new SpeechSynthesisUtterance("Hi, I'm Jarvis. This is what I sound like.");
+      if (pick) u.voice = pick;
+      u.rate = 1.05;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    });
+
+    document.getElementById('settingsSave').addEventListener('click', () => {
+      if (!currentUser) return;
+      currentUser.preferredVoice = voiceSelectEl.value || null;
+      saveUser(currentUser);
+      settingsPanelEl.classList.add('hidden');
+    });
+
     // ─── Research logging (only fires if consented) ───────────────────
     async function logResearchSnapshot() {
       if (!currentUser?.consentResearch) return;
@@ -471,7 +577,12 @@
         utter.pitch = 1.0;
 
         const voices = synth.getVoices();
-        const pick = voices.find(v => v.name === 'Google UK English Male')
+        // First check user-saved preference
+        const preferred = currentUser?.preferredVoice
+          ? voices.find(v => v.name === currentUser.preferredVoice)
+          : null;
+        const pick = preferred
+          || voices.find(v => v.name === 'Google UK English Male')
           || voices.find(v => v.name.includes('Male') && v.lang.startsWith('en'))
           || voices.find(v => v.name === 'Microsoft David - English (United States)')
           || voices.find(v => v.name.includes('David'))
