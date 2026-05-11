@@ -279,8 +279,9 @@
   <!-- Footer disclosure -->
   <div class="footer-note" id="footerNote"></div>
 
-  <!-- ElevenLabs SDK — voice conversation with memory injection -->
-  <script type="module" src="/script.js"></script>
+  <!-- ElevenLabs widget — voice conversation -->
+  <elevenlabs-convai id="convai-widget" agent-id="agent_4401kqcb0w2dey28c69zhchv7ayn"></elevenlabs-convai>
+  <script src="https://elevenlabs.io/convai-widget/index.js" async type="text/javascript"></script>
 
   <script>
     // ─── User management (localStorage) ───────────────────────────────
@@ -502,12 +503,12 @@
       currentHistory = loadHistory();
       refreshChrome();
 
-      // Expose user info for script.js memory + prompt injection
       localStorage.setItem('thinkinbuddy_user_id', user.userId);
       localStorage.setItem('thinkinbuddy_user_name', user.name);
       localStorage.setItem('thinkinbuddy_buddy_name', user.buddyName || 'ThinkinBuddy');
 
-      // Voice handled by script.js SDK module
+      // Activate ElevenLabs widget — agent uses our custom LLM (Claude + web search)
+      document.body.classList.add('elevenlabs-mode');
 
       // Mark first visit done
       if (user.firstVisit) {
