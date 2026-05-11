@@ -1,0 +1,90 @@
+// api/browse.js — fetch a URL and return readable text content.
+//
+// Called by the ElevenLabs agent when the user asks it to visit a website.
+// Fetches the page, strips HTML tags, returns clean readable text.
+//
+// POST body: { url: string }
+// GET param: ?url=...
+// Response:  { result: string }
+
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const url = req.body?.url || req.query?.url;
+  if (!url) return res.status(400).json({ error: 'url required' });
+
+  // Basic URL validation
+  let target;
+  try {
+    target = new URL(url.startsWith('http') ? url : 'https://' + url);
+  } catch {
+    return res.status(400).json({ error: 'invalid url' });
+  }
+
+  try {
+    const response = await fetch(target.toString(), {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; ThinkinBuddy/1.0)',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      return res.status(200).json({
+        result: `The page at ${target.toString()} returned an error (${response.status}). It may require login or block automated access.`
+      });
+    }
+
+    const html = await response.text();
+
+    // Strip HTML to get readable text
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&#\d+;/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+      .slice(0, 4000); // cap at 4k chars so the agent can digest it
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return res.status(200).json({ result: text.slice(0, 500) });
+    }
+
+    // Use Claude to summarize the page content into something speakable
+    const summary = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        max_tokens: 300,
+        system: 'Summarize this webpage content in 3-5 conversational sentences as if you just read it. Focus on what the site is about, what it offers, and your honest impression. No bullet points — this will be read aloud.',
+        messages: [{ role: 'user', content: `URL: ${target.toString()}\n\nPage content:\n${text}` }],
+      }),
+    });
+
+    const data = await summary.json();
+    const result = data.content?.[0]?.text || text.slice(0, 300);
+
+    return res.status(200).json({ result });
+  } catch (err) {
+    console.error('[browse] error:', err);
+    return res.status(200).json({
+      result: `I had trouble loading ${url}. The site may be blocking automated access or is down.`
+    });
+  }
+}
