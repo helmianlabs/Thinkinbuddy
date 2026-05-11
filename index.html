@@ -228,14 +228,16 @@
   <!-- Onboarding overlay (shown on first visit) -->
   <div class="onboarding hidden" id="onboarding">
     <h1>THINKINBUDDY</h1>
-    <p>Hi. I'm your thinking partner. Brain dump, problem-solve, or just talk it out — I'll keep up.</p>
-    <p style="margin-bottom:18px;">What should I call you?</p>
+    <p>Your personal thinking partner. Brain dump, problem-solve, or just talk it out.</p>
+    <p style="margin-bottom:12px;">What should I call you?</p>
     <input type="text" id="onboardName" placeholder="Your first name" autocomplete="off" />
+    <p style="margin-top:18px; margin-bottom:12px;">What do you want to call your buddy?</p>
+    <input type="text" id="onboardBuddyName" placeholder="ThinkinBuddy" autocomplete="off" />
     <div class="onboarding-consent">
       <input type="checkbox" id="onboardConsent" />
-      <label for="onboardConsent">I'm okay with anonymized conversations being saved to help improve this app and for research on AI-assisted thinking. I can opt out anytime.</label>
+      <label for="onboardConsent">I'm okay with anonymized conversations being saved to help improve this app. I can opt out anytime.</label>
     </div>
-    <button id="onboardSubmit">Continue</button>
+    <button id="onboardSubmit">Let's go</button>
   </div>
 
   <!-- Background corners + title -->
@@ -306,6 +308,7 @@
     // ─── Onboarding flow ──────────────────────────────────────────────
     const onboardingEl = document.getElementById('onboarding');
     const onboardNameEl = document.getElementById('onboardName');
+    const onboardBuddyNameEl = document.getElementById('onboardBuddyName');
     const onboardConsentEl = document.getElementById('onboardConsent');
     const onboardSubmitEl = document.getElementById('onboardSubmit');
 
@@ -323,10 +326,12 @@
     function completeOnboarding() {
       const name = onboardNameEl.value.trim();
       if (!name) { onboardNameEl.focus(); return; }
+      const buddyName = onboardBuddyNameEl.value.trim() || 'ThinkinBuddy';
       const consent = onboardConsentEl.checked;
       const user = {
         userId: genUserId(),
         name,
+        buddyName,
         consentResearch: consent,
         consentDate: consent ? new Date().toISOString() : null,
         firstVisit: true,
@@ -497,8 +502,10 @@
       currentHistory = loadHistory();
       refreshChrome();
 
-      // Expose userId for memory API (used by future SDK upgrade)
+      // Expose user info for script.js memory + prompt injection
       localStorage.setItem('thinkinbuddy_user_id', user.userId);
+      localStorage.setItem('thinkinbuddy_user_name', user.name);
+      localStorage.setItem('thinkinbuddy_buddy_name', user.buddyName || 'ThinkinBuddy');
 
       // Voice handled by script.js SDK module
 

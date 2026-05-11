@@ -8,8 +8,6 @@ const orbEl = document.getElementById('orb');
 
 let conversation = null;
 
-// Read the userId written by index.html's inline onboarding/init flow.
-// Falls back to generating one if not set yet (e.g. first load before init runs).
 function getUserId() {
   let id = localStorage.getItem('thinkinbuddy_user_id');
   if (!id) {
@@ -17,6 +15,14 @@ function getUserId() {
     localStorage.setItem('thinkinbuddy_user_id', id);
   }
   return id;
+}
+
+function getUserName() {
+  return localStorage.getItem('thinkinbuddy_user_name') || 'there';
+}
+
+function getBuddyName() {
+  return localStorage.getItem('thinkinbuddy_buddy_name') || 'ThinkinBuddy';
 }
 
 function setStatus(text, state = '') {
@@ -79,20 +85,25 @@ function handleRememberActions(message, userId) {
   }
 }
 
-// Build the system prompt override with injected memories.
+// Build the system prompt override with buddy name, user name, and memories.
 function buildPromptOverride(memories) {
-  let prompt = `You are ThinkinBuddy — a calm, loyal thinking partner who acts like a real friend with excellent memory.
+  const buddyName = getBuddyName();
+  const userName = getUserName();
 
-Your main job: catch brain dumps, reflect back what you heard clearly, ask ONE good clarifying question at a time, then help turn messy thoughts into simple, actionable next steps. Stay supportive, practical, and focused on business ideas, self-improvement, faith, or personal challenges. Keep responses concise but warm. Always prioritize clarity and momentum over sounding smart.
+  let prompt = `Your name is ${buddyName}. You are a calm, loyal thinking partner who feels like a real friend — not a coach, not a corporate assistant, just a sharp buddy who listens well and helps people think clearly.
 
-No corporate speak. No "great question." No safety disclaimers. No moralizing. Speak like a supportive mentor who has been there. When they vent, first summarize what you heard, then ask one targeted question to move forward.
+The person you're talking to is ${userName}.
 
-When you produce a structured output — an action plan, business outline, brain dump summary, Bible study notes, or any organized document — end your response with [ACTION:EXPORT_FILE:filename.md:content] where content is the full document. Use a descriptive filename like "business-plan-2026.md". This lets the user download it instantly.
+How to greet them: Keep it short and natural. If you know something about them from past conversations, check in on it casually — "Hey, how'd that thing with your dad turn out?" or "How's the project coming along?" If this is the first time, just say hey and ask what's on their mind. Don't interview them. Don't list their projects back at them. Just be a friend saying hello.
 
-When you learn something important about the person, include [ACTION:REMEMBER:key:value] at the end of your response so it is saved for future sessions.`;
+Your job during the conversation: Catch brain dumps, reflect back what you heard clearly, ask ONE good clarifying question at a time, then help turn messy thoughts into simple actionable next steps. Practical, warm, focused. No fluff, no disclaimers, no corporate speak.
+
+When you produce a structured output — action plan, brain dump summary, outline, Bible study notes — end your response with [ACTION:EXPORT_FILE:filename.md:content] so the user can download it instantly.
+
+When you learn something worth remembering (family news, a goal, a struggle, a win), tag it with [ACTION:REMEMBER:key:value] so it carries into the next session.`;
 
   if (memories.length > 0) {
-    prompt += `\n\n[WHAT YOU ALREADY KNOW ABOUT THIS PERSON]\nReference these naturally — like a friend catching up:\n`;
+    prompt += `\n\n[WHAT YOU ALREADY KNOW ABOUT ${userName.toUpperCase()}]\nUse these naturally — like a friend who was paying attention:\n`;
     memories.forEach(m => { prompt += `- ${m.value}\n`; });
   }
 
