@@ -277,9 +277,8 @@
   <!-- Footer disclosure -->
   <div class="footer-note" id="footerNote"></div>
 
-  <!-- ElevenLabs convai widget — voice conversation -->
-  <elevenlabs-convai id="convai-widget" agent-id="agent_4401kqcb0w2dey28c69zhchv7ayn"></elevenlabs-convai>
-  <script src="https://elevenlabs.io/convai-widget/index.js" async type="text/javascript"></script>
+  <!-- ElevenLabs SDK — voice conversation with memory injection -->
+  <script type="module" src="/script.js"></script>
 
   <script>
     // ─── User management (localStorage) ───────────────────────────────
@@ -501,8 +500,7 @@
       // Expose userId for memory API (used by future SDK upgrade)
       localStorage.setItem('thinkinbuddy_user_id', user.userId);
 
-      // Activate ElevenLabs widget
-      document.body.classList.add('elevenlabs-mode');
+      // Voice handled by script.js SDK module
 
       // Mark first visit done
       if (user.firstVisit) {

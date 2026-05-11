@@ -8,7 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@elevenlabs/client": "^0.3.0",
+    "@elevenlabs/client": "^1.7.0",
     "@vercel/blob": "^2.3.3"
   },
   "devDependencies": {
