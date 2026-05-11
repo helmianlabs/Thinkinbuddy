@@ -175,6 +175,11 @@ if (orbEl) {
   });
 }
 
+// Service worker — required for Android Chrome standalone mode (no address bar)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js');
+}
+
 // PWA install prompt
 let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
