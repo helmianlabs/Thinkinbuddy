@@ -1,7 +1,7 @@
 {
-  "name": "Jarvis",
-  "short_name": "Jarvis",
-  "description": "Troy's personal AI assistant",
+  "name": "ThinkinBuddy",
+  "short_name": "ThinkinBuddy",
+  "description": "Your personal AI thinking partner",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#050508",
