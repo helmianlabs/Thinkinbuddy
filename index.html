@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#050508" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>ThinkBuddy</title>
+  <title>ThinkinBuddy</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -227,8 +227,8 @@
 <body>
   <!-- Onboarding overlay (shown on first visit) -->
   <div class="onboarding hidden" id="onboarding">
-    <h1>THINKBUDDY</h1>
-    <p>Hi. I'm your AI thinking partner. Brain dump, problem-solve, or just talk it out — I'll keep up.</p>
+    <h1>THINKINBUDDY</h1>
+    <p>Hi. I'm your thinking partner. Brain dump, problem-solve, or just talk it out — I'll keep up.</p>
     <p style="margin-bottom:18px;">What should I call you?</p>
     <input type="text" id="onboardName" placeholder="Your first name" autocomplete="off" />
     <div class="onboarding-consent">
@@ -244,8 +244,8 @@
   <div class="corner bl"></div>
   <div class="corner br"></div>
 
-  <div class="title">JARVIS</div>
-  <div class="subtitle" id="subtitle">PERSONAL AI ASSISTANT</div>
+  <div class="title">THINKINBUDDY</div>
+  <div class="subtitle" id="subtitle">YOUR THINKING PARTNER</div>
 
   <!-- Top-right actions -->
   <div class="actions">
@@ -277,9 +277,8 @@
   <!-- Footer disclosure -->
   <div class="footer-note" id="footerNote"></div>
 
-  <!-- ElevenLabs mode (premium) — agent-id is set dynamically per user in initApp() -->
-  <elevenlabs-convai id="convai-widget"></elevenlabs-convai>
-  <script src="https://elevenlabs.io/convai-widget/index.js" async type="text/javascript"></script>
+  <!-- Voice conversation handled by script.js (ElevenLabs SDK + memory injection) -->
+  <script type="module" src="/script.js"></script>
 
   <script>
     // ─── User management (localStorage) ───────────────────────────────
@@ -379,9 +378,9 @@
       }
       const date = new Date().toISOString().slice(0, 10);
       const userName = currentUser?.name || 'Session';
-      let md = `# ThinkBuddy session — ${userName} — ${date}\n\n`;
+      let md = `# ThinkinBuddy session — ${userName} — ${date}\n\n`;
       for (const msg of currentHistory) {
-        const role = msg.role === 'user' ? userName : 'Jarvis';
+        const role = msg.role === 'user' ? userName : 'ThinkinBuddy';
         const cleanContent = (msg.content || '').replace(/\[ACTION:[^\]]+\]/g, '').trim();
         md += `**${role}:** ${cleanContent}\n\n`;
       }
@@ -389,7 +388,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `thinkbuddy-${userName.toLowerCase()}-${date}.md`;
+      a.download = `thinkinbuddy-${userName.toLowerCase()}-${date}.md`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -448,7 +447,7 @@
       const voiceName = voiceSelectEl.value;
       const voices = window.speechSynthesis.getVoices();
       const pick = voices.find(v => v.name === voiceName);
-      const u = new SpeechSynthesisUtterance("Hi, I'm Jarvis. This is what I sound like.");
+      const u = new SpeechSynthesisUtterance("Hi, I'm ThinkinBuddy. This is what I sound like.");
       if (pick) u.voice = pick;
       u.rate = 1.05;
       window.speechSynthesis.cancel();
@@ -492,49 +491,18 @@
       }
     }, 60000);
 
-    // ─── CONFIG ──────────────────────────────────────────────────────
-    // Per-user ElevenLabs agent routing. Each agent has its voice + system prompt
-    // baked in on the ElevenLabs side; we pick the right one based on identity.
-    const ELEVENLABS_AGENTS = {
-      troy:  'agent_4401kqcb0w2dey28c69zhchv7ayn',  // Jarvis (Troy's profile)
-      derek: 'agent_6101kqmsrna0e2vtvs55y4e2krxm',  // Jarvis-Guest (Derek's profile)
-    };
-    const ELEVENLABS_AGENT_DEFAULT = 'agent_6101kqmsrna0e2vtvs55y4e2krxm'; // Jarvis-Guest = neutral fallback
-
-    const CONFIG = {
-      voice: 'elevenlabs',          // everyone gets premium voice now
-      elevenLabsAgentId: null,      // resolved per-user in initApp()
-      apiEndpoint: '/api/chat'
-    };
-
-    function decideAgentId(user) {
-      const key = (user?.name || '').toLowerCase();
-      return ELEVENLABS_AGENTS[key] || ELEVENLABS_AGENT_DEFAULT;
-    }
-
-    function decideVoiceMode(_user) {
-      // Premium for everyone — Troy has his own agent, Derek has Jarvis-Guest,
-      // unknown users fall back to Jarvis-Guest. No more browser-TTS fallback.
-      return 'elevenlabs';
-    }
-
     // ─── App init ─────────────────────────────────────────────────────
+    // Voice conversation is handled by script.js (ElevenLabs SDK with memory
+    // injection). This inline script owns: onboarding, user management, settings,
+    // export, research logging. It exposes the userId via localStorage so
+    // script.js can fetch the right memories before each session.
     function initApp(user) {
       currentUser = user;
       currentHistory = loadHistory();
       refreshChrome();
 
-      const mode = decideVoiceMode(user);
-      CONFIG.voice = mode;
-      CONFIG.elevenLabsAgentId = decideAgentId(user);
-
-      if (mode === 'elevenlabs') {
-        document.body.classList.add('elevenlabs-mode');
-        const widget = document.getElementById('convai-widget');
-        if (widget) widget.setAttribute('agent-id', CONFIG.elevenLabsAgentId);
-      } else {
-        initBrowserVoice();
-      }
+      // Expose userId for script.js memory lookup (same key it reads)
+      localStorage.setItem('thinkinbuddy_user_id', user.userId);
 
       // Mark first visit done
       if (user.firstVisit) {
