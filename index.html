@@ -277,8 +277,9 @@
   <!-- Footer disclosure -->
   <div class="footer-note" id="footerNote"></div>
 
-  <!-- Voice conversation handled by script.js (ElevenLabs SDK + memory injection) -->
-  <script type="module" src="/script.js"></script>
+  <!-- ElevenLabs convai widget — voice conversation -->
+  <elevenlabs-convai id="convai-widget" agent-id="agent_4401kqcb0w2dey28c69zhchv7ayn"></elevenlabs-convai>
+  <script src="https://elevenlabs.io/convai-widget/index.js" async type="text/javascript"></script>
 
   <script>
     // ─── User management (localStorage) ───────────────────────────────
@@ -492,17 +493,16 @@
     }, 60000);
 
     // ─── App init ─────────────────────────────────────────────────────
-    // Voice conversation is handled by script.js (ElevenLabs SDK with memory
-    // injection). This inline script owns: onboarding, user management, settings,
-    // export, research logging. It exposes the userId via localStorage so
-    // script.js can fetch the right memories before each session.
     function initApp(user) {
       currentUser = user;
       currentHistory = loadHistory();
       refreshChrome();
 
-      // Expose userId for script.js memory lookup (same key it reads)
+      // Expose userId for memory API (used by future SDK upgrade)
       localStorage.setItem('thinkinbuddy_user_id', user.userId);
+
+      // Activate ElevenLabs widget
+      document.body.classList.add('elevenlabs-mode');
 
       // Mark first visit done
       if (user.firstVisit) {
