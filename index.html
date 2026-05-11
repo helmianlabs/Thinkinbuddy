@@ -358,7 +358,10 @@
 
     function refreshChrome() {
       if (!currentUser) return;
-      subtitleEl.textContent = `PERSONAL AI ASSISTANT — ${currentUser.name.toUpperCase()}`;
+      const buddyName = currentUser.buddyName || 'ThinkinBuddy';
+      // Update title to show the buddy's name
+      document.querySelector('.title').textContent = buddyName.toUpperCase();
+      subtitleEl.textContent = `YOUR THINKING PARTNER — ${currentUser.name.toUpperCase()}`;
       const consentText = currentUser.consentResearch
         ? `Conversations may be saved for research as previously discussed. <a id="optoutLink">Opt out</a>`
         : `<a id="optinLink">Enable research mode</a>`;
@@ -511,7 +514,12 @@
       localStorage.setItem('thinkinbuddy_user_name', user.name);
       localStorage.setItem('thinkinbuddy_buddy_name', user.buddyName || 'ThinkinBuddy');
 
-      // Activate ElevenLabs widget — agent uses our custom LLM (Claude + web search)
+      // Pass buddy name to widget so {{buddy_name}} in system prompt resolves correctly
+      const buddyName = user.buddyName || 'ThinkinBuddy';
+      const widget = document.getElementById('convai-widget');
+      if (widget) {
+        widget.setAttribute('dynamic-variables', JSON.stringify({ buddy_name: buddyName }));
+      }
       document.body.classList.add('elevenlabs-mode');
 
       // Mark first visit done
