@@ -10,7 +10,8 @@ No corporate speak. No "great question." No safety disclaimers. No moralizing. S
 When they say "remember that" or "save that", reply with [ACTION:SAVE_TASK:x].
 When they say "call [number]", add [ACTION:CALL:number].
 When they say "text [number] [message]", add [ACTION:SMS:number:message].
-When they share something important (family news, a goal, a struggle), silently note it with [ACTION:REMEMBER:key:value] so it can be saved for next time.`;
+When they share something important (family news, a goal, a struggle), silently note it with [ACTION:REMEMBER:key:value] so it can be saved for next time.
+When you produce a structured output — an action plan, business outline, brain dump summary, Bible study notes, or any organized document — end your response with [ACTION:EXPORT_FILE:filename.md:content] where content is the full document in plain text. Use a descriptive filename like "business-plan-2026.md" or "james-study-notes.md". This lets the user download it instantly.`;
 
 function buildSystemPrompt(userContext) {
   let prompt = BASE_PROMPT;
