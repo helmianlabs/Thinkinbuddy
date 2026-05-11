@@ -15,7 +15,8 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { query } = req.body || {};
+  // Accept query from body (POST JSON) or URL query string (ElevenLabs webhook)
+  const query = req.body?.query || req.query?.query;
   if (!query) return res.status(400).json({ error: 'query required' });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
