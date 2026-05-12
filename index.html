@@ -294,6 +294,22 @@
   <script src="https://elevenlabs.io/convai-widget/index.js" async type="text/javascript"></script>
 
   <script>
+    // Listen for image URLs in widget messages and display them
+    window.addEventListener('elevenlabs-convai:message', (e) => {
+      const msg = e.detail?.message || '';
+      const match = msg.match(/https:\/\/[^\s"]+blob\.vercel-storage\.com\/[^\s"]+/);
+      if (match) showMedia(match[0], '');
+    });
+
+    // Also watch for any message event the widget fires
+    document.addEventListener('elevenlabs-convai:message', (e) => {
+      const msg = JSON.stringify(e.detail || '');
+      const match = msg.match(/https:\/\/[^\s"\\]+blob\.vercel-storage\.com\/[^\s"\\]+/);
+      if (match) showMedia(match[0], '');
+    });
+  </script>
+
+  <script>
     // ─── User management (localStorage) ───────────────────────────────
     const STORAGE_KEY = 'thinkbuddy_user_v1';
     const HISTORY_KEY = 'thinkbuddy_history_v1';
