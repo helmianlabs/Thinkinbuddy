@@ -541,7 +541,7 @@
     }, 60000);
 
     // ─── App init ─────────────────────────────────────────────────────
-    function initApp(user) {
+    async function initApp(user) {
       currentUser = user;
       currentHistory = loadHistory();
       refreshChrome();
@@ -550,11 +550,25 @@
       localStorage.setItem('thinkinbuddy_user_name', user.name);
       localStorage.setItem('thinkinbuddy_buddy_name', user.buddyName || 'ThinkinBuddy');
 
-      // Pass buddy name to widget so {{buddy_name}} in system prompt resolves correctly
       const buddyName = user.buddyName || 'ThinkinBuddy';
+
+      // Fetch memories and inject into agent via dynamic variables
+      let memoriesText = '';
+      try {
+        const memRes = await fetch(`/api/memory?userId=${encodeURIComponent(user.userId)}`);
+        const memData = await memRes.json();
+        if (memData.facts && memData.facts.length > 0) {
+          memoriesText = '[WHAT YOU REMEMBER ABOUT THIS PERSON — reference naturally, like a friend who was paying attention]\n' +
+            memData.facts.map(f => `- ${f.value}`).join('\n');
+        }
+      } catch (e) { console.warn('[memory] fetch failed', e); }
+
       const widget = document.getElementById('convai-widget');
       if (widget) {
-        widget.setAttribute('dynamic-variables', JSON.stringify({ buddy_name: buddyName }));
+        widget.setAttribute('dynamic-variables', JSON.stringify({
+          buddy_name: buddyName,
+          memories: memoriesText || 'No specific memories yet — this may be a first session.',
+        }));
       }
       document.body.classList.add('elevenlabs-mode');
 
