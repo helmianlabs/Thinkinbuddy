@@ -587,6 +587,7 @@
         widget.setAttribute('dynamic-variables', JSON.stringify({
           buddy_name: buddyName,
           memories: memoriesText || 'No specific memories yet.',
+          user_id: user.userId,
         }));
         mount.appendChild(widget);
         console.log('[ThinkinBuddy] widget created with memories:', memoriesText ? 'YES' : 'none');
