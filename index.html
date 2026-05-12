@@ -316,23 +316,19 @@
       if (imagePoller) { clearInterval(imagePoller); imagePoller = null; }
     }
 
-    // Save REMEMBER tags from transcript when call ends
+    // When call ends: fetch transcript via ElevenLabs API, extract facts with Claude, save to memory
     document.addEventListener('elevenlabs-convai:call-ended', async (e) => {
       stopImagePoller();
       const userId = localStorage.getItem('thinkinbuddy_user_id');
       if (!userId) return;
-      // Collect full transcript text from the widget's message elements
-      const msgs = document.querySelectorAll('elevenlabs-convai [data-role="assistant"], elevenlabs-convai .agent-message');
-      let transcript = '';
-      msgs.forEach(m => { transcript += ' ' + (m.textContent || ''); });
-      // Also check event detail for transcript
-      if (e.detail?.transcript) transcript += ' ' + JSON.stringify(e.detail.transcript);
-      if (!transcript.includes('[REMEMBER:')) return;
+      // ElevenLabs widget exposes conversation_id in the call-ended event
+      const conversationId = e.detail?.conversation_id || e.detail?.conversationId;
+      if (!conversationId) return;
       try {
-        await fetch('/api/save-memory', {
+        fetch('/api/extract-memories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, transcript }),
+          body: JSON.stringify({ userId, conversationId }),
         });
       } catch {}
     });
