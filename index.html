@@ -316,6 +316,27 @@
       if (imagePoller) { clearInterval(imagePoller); imagePoller = null; }
     }
 
+    // Save REMEMBER tags from transcript when call ends
+    document.addEventListener('elevenlabs-convai:call-ended', async (e) => {
+      stopImagePoller();
+      const userId = localStorage.getItem('thinkinbuddy_user_id');
+      if (!userId) return;
+      // Collect full transcript text from the widget's message elements
+      const msgs = document.querySelectorAll('elevenlabs-convai [data-role="assistant"], elevenlabs-convai .agent-message');
+      let transcript = '';
+      msgs.forEach(m => { transcript += ' ' + (m.textContent || ''); });
+      // Also check event detail for transcript
+      if (e.detail?.transcript) transcript += ' ' + JSON.stringify(e.detail.transcript);
+      if (!transcript.includes('[REMEMBER:')) return;
+      try {
+        await fetch('/api/save-memory', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, transcript }),
+        });
+      } catch {}
+    });
+
     // Start polling when widget connects, stop when it ends
     document.addEventListener('elevenlabs-convai:call-started', startImagePoller);
     document.addEventListener('elevenlabs-convai:call-ended', stopImagePoller);
