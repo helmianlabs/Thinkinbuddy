@@ -10,7 +10,7 @@ const blobKey = (userId) => `thinkinbuddy/memory/${userId}.json`;
 
 async function readMemory(userId) {
   try {
-    const { blobs } = await list({ prefix: blobKey(userId), limit: 1 });
+    const { blobs } = await list({ prefix: blobKey(userId), limit: 1, token: process.env.BLOB_READ_WRITE_TOKEN });
     if (!blobs || blobs.length === 0) return { userId, facts: [] };
     const res = await fetch(blobs[0].url);
     if (!res.ok) return { userId, facts: [] };
