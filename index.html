@@ -253,6 +253,12 @@
   <div class="title">THINKINBUDDY</div>
   <div class="subtitle" id="subtitle">YOUR THINKING PARTNER</div>
 
+  <!-- Media output area — images and content appear here -->
+  <div id="mediaArea" style="display:none; z-index:2; max-width:340px; width:90%; margin-top:20px;">
+    <img id="mediaImg" src="" alt="" style="width:100%; border-radius:12px; border:1px solid rgba(0,212,255,0.3); display:none;" />
+    <div id="mediaCaption" style="color:#6b7280; font-size:0.7rem; text-align:center; margin-top:8px; font-family:monospace;"></div>
+  </div>
+
   <!-- Top-right actions -->
   <div class="actions">
     <button id="settingsBtn" title="Voice and other settings">⚙ Voice</button>
@@ -527,6 +533,22 @@
         user.firstVisit = false;
         saveUser(user);
       }
+    }
+
+    // ─── Media display ───────────────────────────────────────────────
+    // Poll for new images generated during a conversation
+    let lastMediaCheck = 0;
+    function showMedia(url, caption) {
+      const area = document.getElementById('mediaArea');
+      const img = document.getElementById('mediaImg');
+      const cap = document.getElementById('mediaCaption');
+      if (!area || !img) return;
+      img.src = url;
+      img.style.display = 'block';
+      area.style.display = 'flex';
+      area.style.flexDirection = 'column';
+      area.style.alignItems = 'center';
+      if (caption) cap.textContent = caption;
     }
 
     // ─── Boot ─────────────────────────────────────────────────────────
