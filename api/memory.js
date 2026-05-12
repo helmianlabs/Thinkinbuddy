@@ -47,17 +47,18 @@ export default async function handler(req, res) {
 
   // ── GET — fetch all facts for a user ────────────────────────────────────
   if (req.method === 'GET') {
-    const { userId } = req.query;
-    if (!userId) return res.status(400).json({ error: 'userId required' });
+    const userId = req.query.userId || 'troy';
     const memory = await readMemory(userId);
     return res.status(200).json(memory);
   }
 
   // ── POST — save a fact ───────────────────────────────────────────────────
   if (req.method === 'POST') {
-    const { userId, key, value } = req.body || {};
-    if (!userId || !key || !value) {
-      return res.status(400).json({ error: 'userId, key, value required' });
+    const { key, value } = req.body || {};
+    // userId is optional — default to 'troy' so the agent doesn't need to track it
+    const userId = req.body?.userId || req.query?.userId || 'troy';
+    if (!key || !value) {
+      return res.status(400).json({ error: 'key and value required' });
     }
 
     const memory = await readMemory(userId);
