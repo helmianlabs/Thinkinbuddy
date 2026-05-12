@@ -294,19 +294,33 @@
   <script src="https://elevenlabs.io/convai-widget/index.js" async type="text/javascript"></script>
 
   <script>
-    // Listen for image URLs in widget messages and display them
-    window.addEventListener('elevenlabs-convai:message', (e) => {
-      const msg = e.detail?.message || '';
-      const match = msg.match(/https:\/\/[^\s"]+blob\.vercel-storage\.com\/[^\s"]+/);
-      if (match) showMedia(match[0], '');
-    });
+    // Poll for newly generated images every 3 seconds while widget is active
+    let lastImageTimestamp = 0;
+    let imagePoller = null;
 
-    // Also watch for any message event the widget fires
-    document.addEventListener('elevenlabs-convai:message', (e) => {
-      const msg = JSON.stringify(e.detail || '');
-      const match = msg.match(/https:\/\/[^\s"\\]+blob\.vercel-storage\.com\/[^\s"\\]+/);
-      if (match) showMedia(match[0], '');
-    });
+    function startImagePoller() {
+      if (imagePoller) return;
+      imagePoller = setInterval(async () => {
+        try {
+          const res = await fetch('/api/latest-image');
+          const data = await res.json();
+          if (data.url && data.timestamp && data.timestamp > lastImageTimestamp) {
+            lastImageTimestamp = data.timestamp;
+            showMedia(data.url, data.prompt || '');
+          }
+        } catch {}
+      }, 3000);
+    }
+
+    function stopImagePoller() {
+      if (imagePoller) { clearInterval(imagePoller); imagePoller = null; }
+    }
+
+    // Start polling when widget connects, stop when it ends
+    document.addEventListener('elevenlabs-convai:call-started', startImagePoller);
+    document.addEventListener('elevenlabs-convai:call-ended', stopImagePoller);
+    // Also start on page load in case a session is already active
+    window.addEventListener('load', () => setTimeout(startImagePoller, 2000));
   </script>
 
   <script>

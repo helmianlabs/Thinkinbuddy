@@ -64,8 +64,15 @@ export default async function handler(req, res) {
       { access: 'public', contentType: 'image/png', addRandomSuffix: false }
     );
 
+    // Write latest image pointer so the page can poll for it
+    await put(
+      'thinkinbuddy/latest-image.json',
+      JSON.stringify({ url: blob.url, prompt, timestamp: Date.now() }),
+      { access: 'public', contentType: 'application/json', addRandomSuffix: false }
+    );
+
     return res.status(200).json({
-      result: `Image generated. Here is the URL: ${blob.url}`,
+      result: `Image generated successfully.`,
       url: blob.url,
       prompt,
     });
