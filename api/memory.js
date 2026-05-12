@@ -19,8 +19,13 @@ async function readMemory(userId) {
     // Use list() to find the actual blob URL (includes the store-specific prefix)
     const { blobs } = await list({ prefix: blobKey(userId), limit: 1, token: process.env.BLOB_READ_WRITE_TOKEN });
     if (!blobs || blobs.length === 0) return { userId, facts: [] };
-    // Cache-bust to avoid Vercel CDN serving stale blob
-    const res = await fetch(`${blobs[0].url}?t=${Date.now()}`);
+    // Use downloadUrl (bypasses CDN) if available, else fallback to public URL
+    const fetchUrl = blobs[0].downloadUrl || blobs[0].url;
+    const res = await fetch(fetchUrl, {
+      headers: blobs[0].downloadUrl
+        ? { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` }
+        : {},
+    });
     if (!res.ok) return { userId, facts: [] };
     return await res.json();
   } catch {
