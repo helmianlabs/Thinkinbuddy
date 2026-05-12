@@ -289,8 +289,8 @@
   <!-- Footer disclosure -->
   <div class="footer-note" id="footerNote"></div>
 
-  <!-- ElevenLabs widget — voice conversation -->
-  <elevenlabs-convai id="convai-widget" agent-id="agent_4401kqcb0w2dey28c69zhchv7ayn"></elevenlabs-convai>
+  <!-- ElevenLabs widget injected dynamically by initApp AFTER memories are loaded -->
+  <div id="widget-mount"></div>
   <script src="https://elevenlabs.io/convai-widget/index.js" async type="text/javascript"></script>
 
   <script>
@@ -333,11 +333,8 @@
       } catch {}
     });
 
-    // Start polling when widget connects, stop when it ends
     document.addEventListener('elevenlabs-convai:call-started', startImagePoller);
     document.addEventListener('elevenlabs-convai:call-ended', stopImagePoller);
-    // Also start on page load in case a session is already active
-    window.addEventListener('load', () => setTimeout(startImagePoller, 2000));
   </script>
 
   <script>
@@ -580,12 +577,19 @@
         }
       } catch (e) { console.warn('[memory] fetch failed', e); }
 
-      const widget = document.getElementById('convai-widget');
-      if (widget) {
+      // Create widget AFTER memories are fetched — this is the only way
+      // to guarantee dynamic-variables are set before the widget connects.
+      const mount = document.getElementById('widget-mount');
+      if (mount) {
+        const widget = document.createElement('elevenlabs-convai');
+        widget.setAttribute('id', 'convai-widget');
+        widget.setAttribute('agent-id', 'agent_4401kqcb0w2dey28c69zhchv7ayn');
         widget.setAttribute('dynamic-variables', JSON.stringify({
           buddy_name: buddyName,
-          memories: memoriesText || 'No specific memories yet — this may be a first session.',
+          memories: memoriesText || 'No specific memories yet.',
         }));
+        mount.appendChild(widget);
+        console.log('[ThinkinBuddy] widget created with memories:', memoriesText ? 'YES' : 'none');
       }
       document.body.classList.add('elevenlabs-mode');
 
