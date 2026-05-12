@@ -566,31 +566,24 @@
 
       const buddyName = user.buddyName || 'ThinkinBuddy';
 
-      // Fetch memories and inject into agent via dynamic variables
-      let memoriesText = '';
+      // Prime the agent: patch system prompt directly with memories. No dynamic variables.
       try {
-        const memRes = await fetch(`/api/memory?userId=${encodeURIComponent(user.userId)}`);
-        const memData = await memRes.json();
-        if (memData.facts && memData.facts.length > 0) {
-          memoriesText = '[WHAT YOU REMEMBER ABOUT THIS PERSON — reference naturally, like a friend who was paying attention]\n' +
-            memData.facts.map(f => `- ${f.value}`).join('\n');
-        }
-      } catch (e) { console.warn('[memory] fetch failed', e); }
+        const primeRes = await fetch('/api/prime-agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ buddyName }),
+        });
+        const p = await primeRes.json();
+        console.log('[ThinkinBuddy] primed — memories:', p.memoryCount, 'buddy:', p.buddyName);
+      } catch (e) { console.warn('[ThinkinBuddy] prime failed', e); }
 
-      // Create widget AFTER memories are fetched — this is the only way
-      // to guarantee dynamic-variables are set before the widget connects.
+      // Create widget after agent is primed
       const mount = document.getElementById('widget-mount');
       if (mount) {
         const widget = document.createElement('elevenlabs-convai');
         widget.setAttribute('id', 'convai-widget');
         widget.setAttribute('agent-id', 'agent_4401kqcb0w2dey28c69zhchv7ayn');
-        widget.setAttribute('dynamic-variables', JSON.stringify({
-          buddy_name: buddyName,
-          memories: memoriesText || 'No specific memories yet.',
-          user_id: user.userId,
-        }));
         mount.appendChild(widget);
-        console.log('[ThinkinBuddy] widget created with memories:', memoriesText ? 'YES' : 'none');
       }
       document.body.classList.add('elevenlabs-mode');
 
