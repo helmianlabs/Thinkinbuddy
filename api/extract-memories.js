@@ -3,16 +3,15 @@
 //
 // POST body: { userId: string, conversationId: string }
 
-import { put } from '@vercel/blob';
+import { put, list } from '@vercel/blob';
 
 const blobKey = (userId) => `thinkinbuddy/memory/${userId}.json`;
 
 async function readMemory(userId) {
   try {
-    const res = await fetch(
-      `https://blob.vercel-storage.com/${blobKey(userId)}`,
-      { headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` } }
-    );
+    const { blobs } = await list({ prefix: blobKey(userId), limit: 1 });
+    if (!blobs || blobs.length === 0) return { userId, facts: [] };
+    const res = await fetch(blobs[0].url);
     if (!res.ok) return { userId, facts: [] };
     return await res.json();
   } catch { return { userId, facts: [] }; }

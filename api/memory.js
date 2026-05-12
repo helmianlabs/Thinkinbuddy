@@ -10,17 +10,18 @@
 // Injected into the system prompt at session start so ThinkinBuddy
 // remembers details across conversations like a real friend would.
 
-import { put, get, del } from '@vercel/blob';
+import { put, list } from '@vercel/blob';
 
 const blobKey = (userId) => `thinkinbuddy/memory/${userId}.json`;
 
 async function readMemory(userId) {
   try {
-    const url = `https://blob.vercel-storage.com/${blobKey(userId)}`;
-    const res = await get(url);
-    if (!res) return { userId, facts: [] };
-    const text = await res.text();
-    return JSON.parse(text);
+    // Use list() to find the actual blob URL (includes the store-specific prefix)
+    const { blobs } = await list({ prefix: blobKey(userId), limit: 1 });
+    if (!blobs || blobs.length === 0) return { userId, facts: [] };
+    const res = await fetch(blobs[0].url);
+    if (!res.ok) return { userId, facts: [] };
+    return await res.json();
   } catch {
     return { userId, facts: [] };
   }
