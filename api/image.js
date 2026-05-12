@@ -58,17 +58,18 @@ export default async function handler(req, res) {
     // Fetch and store in Vercel Blob so it persists (OpenAI URLs expire in 1 hour)
     const imageRes = await fetch(imageUrl);
     const imageBuffer = await imageRes.arrayBuffer();
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
     const blob = await put(
       `thinkinbuddy/images/${Date.now()}.png`,
       Buffer.from(imageBuffer),
-      { access: 'public', contentType: 'image/png', addRandomSuffix: false }
+      { access: 'public', contentType: 'image/png', addRandomSuffix: false, token }
     );
 
     // Write latest image pointer so the page can poll for it
     await put(
       'thinkinbuddy/latest-image.json',
       JSON.stringify({ url: blob.url, prompt, timestamp: Date.now() }),
-      { access: 'public', contentType: 'application/json', addRandomSuffix: false }
+      { access: 'public', contentType: 'application/json', addRandomSuffix: false, token }
     );
 
     return res.status(200).json({

@@ -8,10 +8,9 @@ export default async function handler(req, res) {
   if (!token) return res.status(200).json({ url: null });
 
   try {
-    const response = await fetch(
-      'https://blob.vercel-storage.com/thinkinbuddy/latest-image.json',
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+    const { blobs } = await (await import('@vercel/blob')).list({ prefix: 'thinkinbuddy/latest-image.json', limit: 1, token });
+    if (!blobs?.length) return res.status(200).json({ url: null });
+    const response = await fetch(blobs[0].url);
     if (!response.ok) return res.status(200).json({ url: null });
     const data = await response.json();
     return res.status(200).json(data);

@@ -9,7 +9,8 @@ const BUDDY_KEY = 'thinkinbuddy/memory/troy.json';
 
 async function getMemories() {
   try {
-    const { blobs } = await list({ prefix: BUDDY_KEY, limit: 1, token: process.env.BLOB_READ_WRITE_TOKEN });
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
+    const { blobs } = await list({ prefix: BUDDY_KEY, limit: 1, token });
     if (!blobs?.length) return [];
     const res = await fetch(blobs[0].url);
     if (!res.ok) return [];
