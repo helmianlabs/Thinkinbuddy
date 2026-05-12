@@ -62,20 +62,19 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'key and value required' });
     }
 
-    const memory = await readMemory(userId);
-
-    // Upsert by key
-    const idx = memory.facts.findIndex(f => f.key === key);
-    const fact = { key, value, savedAt: new Date().toISOString() };
-    if (idx >= 0) {
-      memory.facts[idx] = fact;
-    } else {
-      memory.facts.push(fact);
+    try {
+      const memory = await readMemory(userId);
+      const idx = memory.facts.findIndex(f => f.key === key);
+      const fact = { key, value, savedAt: new Date().toISOString() };
+      if (idx >= 0) memory.facts[idx] = fact;
+      else memory.facts.push(fact);
+      memory.lastUpdated = new Date().toISOString();
+      await writeMemory(memory);
+      return res.status(200).json({ ok: true, fact });
+    } catch (err) {
+      console.error('[memory POST]', err?.message || err);
+      return res.status(500).json({ error: err?.message || 'write failed' });
     }
-    memory.lastUpdated = new Date().toISOString();
-
-    await writeMemory(memory);
-    return res.status(200).json({ ok: true, fact });
   }
 
   // ── DELETE — remove a specific fact ─────────────────────────────────────
