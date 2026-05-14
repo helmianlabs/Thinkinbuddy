@@ -1,5 +1,11 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "framework": "vite"
+  "framework": "vite",
+  "functions": {
+    "api/image.js": { "maxDuration": 60 },
+    "api/extract-memories.js": { "maxDuration": 30 },
+    "api/browse.js": { "maxDuration": 30 },
+    "api/search.js": { "maxDuration": 30 }
+  }
 }
