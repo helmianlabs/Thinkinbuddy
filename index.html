@@ -566,15 +566,19 @@
 
       const buddyName = user.buddyName || 'ThinkinBuddy';
 
-      // Prime the agent: patch system prompt directly with memories. No dynamic variables.
+      // Prime the agent: patch system prompt with this user's memories.
       try {
         const primeRes = await fetch('/api/prime-agent', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ buddyName }),
+          body: JSON.stringify({
+            buddyName,
+            userName: user.name,
+            userId: user.userId,
+          }),
         });
         const p = await primeRes.json();
-        console.log('[ThinkinBuddy] primed — memories:', p.memoryCount, 'buddy:', p.buddyName);
+        console.log('[ThinkinBuddy] primed — memories:', p.memoryCount, 'buddy:', p.buddyName, 'user:', p.userId);
       } catch (e) { console.warn('[ThinkinBuddy] prime failed', e); }
 
       // Create widget after agent is primed

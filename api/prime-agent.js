@@ -1,22 +1,39 @@
 // api/prime-agent.js — called when the page loads.
-// Fetches Troy's memories and patches the ElevenLabs agent system prompt directly.
-// No dynamic variables, no widget attributes — the agent gets the memory baked in.
+//
+// Reads the user's persisted memories from Vercel Blob (same path memory.js
+// writes to) and PATCHes the ElevenLabs ConvAI agent's system prompt so the
+// agent boots already knowing the user's facts.
+//
+// The personality string comes from lib/personality.js — single source of
+// truth. Do NOT inline a prompt here.
+//
+// NOTE: the ElevenLabs agent prompt is GLOBAL (one prompt across all users
+// who hit this agent). Fine for single-user / single-tenant use. For real
+// multi-user, switch the client to per-session overrides via
+// Conversation.startSession({ overrides }) like script.js does.
 
 import { list } from '@vercel/blob';
+import { buildSystemPrompt } from '../lib/personality.js';
 
 const AGENT_ID = 'agent_4401kqcb0w2dey28c69zhchv7ayn';
-const BUDDY_KEY = 'thinkinbuddy/memory/troy.json';
 
-async function getMemories() {
+const blobPrefix = (userId) => `thinkinbuddy/memory/${userId}/`;
+
+async function getMemories(userId) {
   try {
     const token = process.env.BLOB_READ_WRITE_TOKEN;
-    const { blobs } = await list({ prefix: BUDDY_KEY, limit: 1, token });
+    const { blobs } = await list({ prefix: blobPrefix(userId), limit: 5, token });
     if (!blobs?.length) return [];
+    // Most recently uploaded blob is the current memory state.
+    blobs.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
     const res = await fetch(blobs[0].url);
     if (!res.ok) return [];
     const data = await res.json();
     return data.facts || [];
-  } catch { return []; }
+  } catch (err) {
+    console.error('[prime-agent] memory read failed:', err?.message || err);
+    return [];
+  }
 }
 
 export default async function handler(req, res) {
@@ -24,28 +41,26 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const buddyName = req.body?.buddyName || 'ThinkinBuddy';
+  const userName = req.body?.userName || null;
+  const userId = req.body?.userId || 'troy';
+
   const elevenKey = process.env.ELEVENLABS_API_KEY;
   if (!elevenKey) return res.status(500).json({ error: 'ELEVENLABS_API_KEY not set' });
 
-  const facts = await getMemories();
+  const facts = await getMemories(userId);
 
-  let memoryBlock = '';
-  if (facts.length > 0) {
-    memoryBlock = '\n\n[WHAT YOU KNOW — reference naturally like a friend who was paying attention]\n' +
-      facts.map(f => `- ${f.value}`).join('\n');
-  }
-
-  const prompt = `Your name is ${buddyName}. You are a calm, loyal thinking partner — warm, sharp, no fluff.${memoryBlock}
-
-You have tools. Use them without announcing it:
-- search_web: look up current facts, news, weather, prices
-- browse_url: visit and read a specific website
-- generate_image: draw or visualize anything
-- save_memory: when the user shares personal info (name, location, projects, family, goals), call this immediately with key and value. Do it silently mid-conversation.
-
-Greet casually. One question at a time. No corporate speak.`;
+  // ElevenLabs widget path: it has REAL tool calls registered on the agent,
+  // so we don't need the action-tag fallback here. Tools block stays.
+  const prompt = buildSystemPrompt({
+    buddyName,
+    userName,
+    memories: facts,
+    includeToolsBlock: true,
+    includeActionTags: false,
+  });
 
   try {
     const r = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${AGENT_ID}`, {
@@ -55,10 +70,12 @@ Greet casually. One question at a time. No corporate speak.`;
     });
     if (!r.ok) {
       const err = await r.text();
-      return res.status(200).json({ ok: false, error: err.slice(0, 200) });
+      console.error('[prime-agent] PATCH failed:', r.status, err.slice(0, 200));
+      return res.status(502).json({ ok: false, status: r.status, error: err.slice(0, 200) });
     }
-    return res.status(200).json({ ok: true, memoryCount: facts.length, buddyName });
+    return res.status(200).json({ ok: true, memoryCount: facts.length, buddyName, userId });
   } catch (err) {
-    return res.status(200).json({ ok: false, error: String(err) });
+    console.error('[prime-agent] PATCH error:', err?.message || err);
+    return res.status(502).json({ ok: false, error: String(err?.message || err) });
   }
 }
