@@ -302,7 +302,9 @@
       if (imagePoller) return;
       imagePoller = setInterval(async () => {
         try {
-          const res = await fetch('/api/latest-image');
+          // userId stays default ('anonymous') because the ElevenLabs agent
+          // tool schema doesn't pass one yet. Both sides agree on the default.
+          const res = await fetch(`/api/latest-image?since=${lastImageTimestamp}`);
           const data = await res.json();
           if (data.url && data.timestamp && data.timestamp > lastImageTimestamp) {
             lastImageTimestamp = data.timestamp;
