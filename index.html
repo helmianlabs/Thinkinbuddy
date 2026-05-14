@@ -318,19 +318,23 @@
       if (imagePoller) { clearInterval(imagePoller); imagePoller = null; }
     }
 
-    // When call ends: fetch transcript via ElevenLabs API, extract facts with Claude, save to memory
+    // When call ends: fetch transcript via ElevenLabs API, extract facts with Claude, save to memory.
+    //
+    // NOTE: userId is hardcoded to 'troy' across the front-end (here AND in the
+    // /api/prime-agent call below) to match the same default used by the
+    // save_memory ElevenLabs tool. Without this, save_memory writes go to
+    // /troy/ and reads come from a random localStorage ID — the buddy never
+    // sees what it stored. TODO: when we add real auth, plumb the real user
+    // identity through the save_memory tool params too.
     document.addEventListener('elevenlabs-convai:call-ended', async (e) => {
       stopImagePoller();
-      const userId = localStorage.getItem('thinkinbuddy_user_id');
-      if (!userId) return;
-      // ElevenLabs widget exposes conversation_id in the call-ended event
       const conversationId = e.detail?.conversation_id || e.detail?.conversationId;
       if (!conversationId) return;
       try {
         fetch('/api/extract-memories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, conversationId }),
+          body: JSON.stringify({ userId: 'troy', conversationId }),
         });
       } catch {}
     });
@@ -569,6 +573,8 @@
       const buddyName = user.buddyName || 'ThinkinBuddy';
 
       // Prime the agent: patch system prompt with this user's memories.
+      // userId is forced to 'troy' to match the save_memory tool's default
+      // — see the note on the call-ended handler below for the full story.
       try {
         const primeRes = await fetch('/api/prime-agent', {
           method: 'POST',
@@ -576,7 +582,7 @@
           body: JSON.stringify({
             buddyName,
             userName: user.name,
-            userId: user.userId,
+            userId: 'troy',
           }),
         });
         const p = await primeRes.json();
