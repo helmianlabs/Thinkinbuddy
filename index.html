@@ -253,10 +253,11 @@
   <div class="title">THINKINBUDDY</div>
   <div class="subtitle" id="subtitle">YOUR THINKING PARTNER</div>
 
-  <!-- Media output area — images and content appear here -->
+  <!-- Media output area — images and videos appear here -->
   <div id="mediaArea" style="display:none; z-index:2; max-width:340px; width:90%; margin-top:20px; position:relative;">
-    <button id="mediaCloseBtn" type="button" aria-label="Dismiss image" style="position:absolute; top:-10px; right:-10px; width:32px; height:32px; border-radius:50%; border:1px solid rgba(0,212,255,0.5); background:rgba(0,0,0,0.85); color:#00d4ff; font-size:1rem; font-family:monospace; cursor:pointer; z-index:3; display:flex; align-items:center; justify-content:center; padding:0;">✕</button>
+    <button id="mediaCloseBtn" type="button" aria-label="Dismiss media" style="position:absolute; top:-10px; right:-10px; width:32px; height:32px; border-radius:50%; border:1px solid rgba(0,212,255,0.5); background:rgba(0,0,0,0.85); color:#00d4ff; font-size:1rem; font-family:monospace; cursor:pointer; z-index:3; display:flex; align-items:center; justify-content:center; padding:0;">✕</button>
     <img id="mediaImg" src="" alt="" style="width:100%; border-radius:12px; border:1px solid rgba(0,212,255,0.3); display:none;" />
+    <video id="mediaVideo" playsinline controls autoplay muted loop style="width:100%; border-radius:12px; border:1px solid rgba(0,212,255,0.3); display:none;"></video>
     <div id="mediaCaption" style="color:#6b7280; font-size:0.7rem; text-align:center; margin-top:8px; font-family:monospace;"></div>
   </div>
 
@@ -319,6 +320,29 @@
       if (imagePoller) { clearInterval(imagePoller); imagePoller = null; }
     }
 
+    // Poll for newly generated videos. Same cadence; separate timestamp cursor
+    // so an image render doesn't suppress a later video render and vice versa.
+    let lastVideoTimestamp = 0;
+    let videoPoller = null;
+
+    function startVideoPoller() {
+      if (videoPoller) return;
+      videoPoller = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/latest-video?since=${lastVideoTimestamp}`);
+          const data = await res.json();
+          if (data.url && data.timestamp && data.timestamp > lastVideoTimestamp) {
+            lastVideoTimestamp = data.timestamp;
+            showVideo(data.url, data.prompt || '');
+          }
+        } catch {}
+      }, 3000);
+    }
+
+    function stopVideoPoller() {
+      if (videoPoller) { clearInterval(videoPoller); videoPoller = null; }
+    }
+
     // When call ends: fetch transcript via ElevenLabs API, extract facts with Claude, save to memory.
     //
     // NOTE: userId is hardcoded to 'troy' across the front-end (here AND in the
@@ -369,6 +393,7 @@
     document.addEventListener('elevenlabs-convai:call', (e) => {
       console.log('[MEM-HB] :call handler running — has detail?', !!e.detail, 'has config?', !!e.detail?.config);
       startImagePoller();
+      startVideoPoller();
       extractFired = false;
       lastConversationId = null;
       const cfg = e.detail?.config;
@@ -386,6 +411,7 @@
         idleTimer = setTimeout(() => {
           console.log('[MEM-HB] idle timer expired — firing extract-memories');
           stopImagePoller();
+          stopVideoPoller();
           fireExtractMemories('idle-timeout');
         }, IDLE_MS);
         if (typeof userOnMessage === 'function') try { userOnMessage(msg); } catch {}
@@ -394,6 +420,7 @@
       cfg.onDisconnect = (info) => {
         console.log('[MEM-HB] onDisconnect fired — firing extract-memories');
         stopImagePoller();
+        stopVideoPoller();
         fireExtractMemories('disconnect');
         if (typeof userOnDisconnect === 'function') try { userOnDisconnect(info); } catch {}
       };
@@ -402,6 +429,7 @@
     window.addEventListener('pagehide', () => {
       console.log('[MEM-HB] pagehide fired');
       stopImagePoller();
+      stopVideoPoller();
       fireExtractMemories('pagehide');
     });
   </script>
@@ -670,13 +698,17 @@
     }
 
     // ─── Media display ───────────────────────────────────────────────
-    // Poll for new images generated during a conversation
+    // Poll for new images/videos generated during a conversation. Image and
+    // video share #mediaArea — showing one hides the other so the orb area
+    // doesn't get crowded.
     let lastMediaCheck = 0;
     function showMedia(url, caption) {
       const area = document.getElementById('mediaArea');
       const img = document.getElementById('mediaImg');
+      const vid = document.getElementById('mediaVideo');
       const cap = document.getElementById('mediaCaption');
       if (!area || !img) return;
+      if (vid) { try { vid.pause(); } catch {} vid.style.display = 'none'; vid.src = ''; }
       img.src = url;
       img.style.display = 'block';
       area.style.display = 'flex';
@@ -685,12 +717,31 @@
       if (cap) cap.textContent = '';
     }
 
+    function showVideo(url, caption) {
+      const area = document.getElementById('mediaArea');
+      const img = document.getElementById('mediaImg');
+      const vid = document.getElementById('mediaVideo');
+      const cap = document.getElementById('mediaCaption');
+      if (!area || !vid) return;
+      if (img) { img.style.display = 'none'; img.src = ''; }
+      vid.src = url;
+      vid.style.display = 'block';
+      // Explicit play() handles browsers that won't auto-restart on src swap.
+      try { vid.play().catch(() => {}); } catch {}
+      area.style.display = 'flex';
+      area.style.flexDirection = 'column';
+      area.style.alignItems = 'center';
+      if (cap) cap.textContent = caption || '';
+    }
+
     function hideMedia() {
       const area = document.getElementById('mediaArea');
       const img = document.getElementById('mediaImg');
+      const vid = document.getElementById('mediaVideo');
       const cap = document.getElementById('mediaCaption');
       if (area) area.style.display = 'none';
       if (img) { img.style.display = 'none'; img.src = ''; }
+      if (vid) { try { vid.pause(); } catch {} vid.style.display = 'none'; vid.src = ''; }
       if (cap) cap.textContent = '';
     }
 
