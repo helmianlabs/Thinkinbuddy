@@ -13,9 +13,10 @@ import { put } from '@vercel/blob';
 
 const RUNWAY_BASE = 'https://api.dev.runwayml.com/v1';
 const RUNWAY_VERSION = '2024-11-06';
-const MODEL = 'gen4_turbo'; // text_to_video supports gen4_turbo + veo3 etc.
-const DEFAULT_DURATION = 5;
-const ALLOWED_DURATIONS = [5, 10]; // gen4_turbo allows 5 or 10
+const MODEL = 'veo3'; // text_to_video on Runway — veo3 is the most reliable;
+                       // gen4_turbo is image-to-video only. veo3 returns ~8s clips.
+const DEFAULT_DURATION = 8;
+const ALLOWED_DURATIONS = [4, 6, 8]; // text_to_video allowed values
 const POLL_INTERVAL_MS = 4000;
 const POLL_TIMEOUT_MS = 270000; // 4.5 min — leaves headroom under our 300s maxDuration
 
@@ -36,7 +37,7 @@ export default async function handler(req, res) {
   let duration = Number(req.body?.duration || req.query?.duration || DEFAULT_DURATION);
   if (!ALLOWED_DURATIONS.includes(duration)) {
     // Snap to nearest allowed value rather than failing
-    duration = duration > 7 ? 10 : 5;
+    duration = duration >= 7 ? 8 : (duration >= 5 ? 6 : 4);
   }
 
   const apiKey = process.env.RUNWAY_API_KEY;
@@ -62,9 +63,11 @@ export default async function handler(req, res) {
     });
 
     if (!createRes.ok) {
-      const err = await createRes.json().catch(() => ({}));
-      const msg = err?.error || err?.message || `Runway ${createRes.status}`;
-      console.error('[video] Runway create error:', msg, JSON.stringify(err));
+      const errText = await createRes.text().catch(() => '');
+      let err = {};
+      try { err = JSON.parse(errText); } catch {}
+      const msg = err?.error || err?.message || errText || `Runway ${createRes.status}`;
+      console.error('[video] Runway create error:', createRes.status, errText);
       return res.status(502).json({ result: `Video generation failed: ${msg}` });
     }
 
