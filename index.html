@@ -254,7 +254,8 @@
   <div class="subtitle" id="subtitle">YOUR THINKING PARTNER</div>
 
   <!-- Media output area — images and content appear here -->
-  <div id="mediaArea" style="display:none; z-index:2; max-width:340px; width:90%; margin-top:20px;">
+  <div id="mediaArea" style="display:none; z-index:2; max-width:340px; width:90%; margin-top:20px; position:relative;">
+    <button id="mediaCloseBtn" type="button" aria-label="Dismiss image" style="position:absolute; top:-10px; right:-10px; width:32px; height:32px; border-radius:50%; border:1px solid rgba(0,212,255,0.5); background:rgba(0,0,0,0.85); color:#00d4ff; font-size:1rem; font-family:monospace; cursor:pointer; z-index:3; display:flex; align-items:center; justify-content:center; padding:0;">✕</button>
     <img id="mediaImg" src="" alt="" style="width:100%; border-radius:12px; border:1px solid rgba(0,212,255,0.3); display:none;" />
     <div id="mediaCaption" style="color:#6b7280; font-size:0.7rem; text-align:center; margin-top:8px; font-family:monospace;"></div>
   </div>
@@ -664,6 +665,17 @@
       area.style.alignItems = 'center';
       if (cap) cap.textContent = '';
     }
+
+    function hideMedia() {
+      const area = document.getElementById('mediaArea');
+      const img = document.getElementById('mediaImg');
+      const cap = document.getElementById('mediaCaption');
+      if (area) area.style.display = 'none';
+      if (img) { img.style.display = 'none'; img.src = ''; }
+      if (cap) cap.textContent = '';
+    }
+
+    document.getElementById('mediaCloseBtn')?.addEventListener('click', hideMedia);
 
     // ─── Boot ─────────────────────────────────────────────────────────
     const existingUser = loadUser();
