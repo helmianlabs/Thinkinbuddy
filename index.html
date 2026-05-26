@@ -345,43 +345,62 @@
     const IDLE_MS = 45000; // 45s of silence = call effectively ended
 
     function fireExtractMemories(reason) {
-      if (extractFired || !lastConversationId) return;
+      if (extractFired) { console.log('[MEM-HB] fire skipped — already fired:', reason); return; }
+      if (!lastConversationId) { console.log('[MEM-HB] fire skipped — no conversationId yet:', reason); return; }
       extractFired = true;
       try {
         fetch('/api/extract-memories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId: 'troy', conversationId: lastConversationId }),
-          keepalive: true, // survives pagehide
+          keepalive: true,
         });
-        console.log('[ThinkinBuddy] extract-memories fired:', reason, lastConversationId);
-      } catch (e) { console.warn('[ThinkinBuddy] extract-memories failed', e); }
+        console.log('[MEM-HB] extract-memories POSTed:', reason, lastConversationId);
+      } catch (e) { console.warn('[MEM-HB] extract-memories failed', e); }
     }
 
+    // Catch-all heartbeat: log EVERY elevenlabs-* event so we can see what the widget actually dispatches.
+    ['elevenlabs-convai:call', 'elevenlabs-convai:call-started', 'elevenlabs-convai:call-ended', 'elevenlabs-convai:message', 'elevenlabs-convai:disconnect', 'elevenlabs-convai:status'].forEach(evtName => {
+      document.addEventListener(evtName, (e) => {
+        console.log('[MEM-HB] event fired:', evtName, 'detail keys:', Object.keys(e.detail || {}));
+      });
+    });
+
     document.addEventListener('elevenlabs-convai:call', (e) => {
+      console.log('[MEM-HB] :call handler running — has detail?', !!e.detail, 'has config?', !!e.detail?.config);
       startImagePoller();
       extractFired = false;
       lastConversationId = null;
       const cfg = e.detail?.config;
-      if (!cfg) return;
+      if (!cfg) { console.warn('[MEM-HB] BAIL — no e.detail.config, cannot inject onConnect'); return; }
       const userOnConnect = cfg.onConnect;
       cfg.onConnect = (info) => {
         lastConversationId = info?.conversationId || null;
-        console.log('[ThinkinBuddy] call connected:', lastConversationId);
+        console.log('[MEM-HB] onConnect fired — conversationId:', lastConversationId);
         if (typeof userOnConnect === 'function') try { userOnConnect(info); } catch {}
       };
       const userOnMessage = cfg.onMessage;
       cfg.onMessage = (msg) => {
+        console.log('[MEM-HB] onMessage fired — resetting idle timer');
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
+          console.log('[MEM-HB] idle timer expired — firing extract-memories');
           stopImagePoller();
           fireExtractMemories('idle-timeout');
         }, IDLE_MS);
         if (typeof userOnMessage === 'function') try { userOnMessage(msg); } catch {}
       };
+      const userOnDisconnect = cfg.onDisconnect;
+      cfg.onDisconnect = (info) => {
+        console.log('[MEM-HB] onDisconnect fired — firing extract-memories');
+        stopImagePoller();
+        fireExtractMemories('disconnect');
+        if (typeof userOnDisconnect === 'function') try { userOnDisconnect(info); } catch {}
+      };
     });
 
     window.addEventListener('pagehide', () => {
+      console.log('[MEM-HB] pagehide fired');
       stopImagePoller();
       fireExtractMemories('pagehide');
     });
