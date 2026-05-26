@@ -58,7 +58,8 @@ export default async function handler(req, res) {
       publicUrl = url;
     } else if (b64) {
       const buf = Buffer.from(b64, 'base64');
-      const key = `${blobPrefix(userId)}${Date.now()}.png`;
+      const ts = Date.now();
+      const key = `${blobPrefix(userId)}${ts}.png`;
       const blob = await put(key, buf, {
         access: 'public',
         contentType: 'image/png',
@@ -66,6 +67,16 @@ export default async function handler(req, res) {
         token: blobToken,
       });
       publicUrl = blob.url;
+      // Sidecar so /api/latest-image can return the original prompt as caption.
+      try {
+        await put(
+          `${blobPrefix(userId)}${ts}.meta.json`,
+          JSON.stringify({ prompt }),
+          { access: 'public', contentType: 'application/json', addRandomSuffix: false, token: blobToken }
+        );
+      } catch (err) {
+        console.error('[image] sidecar write failed (non-fatal):', err?.message || err);
+      }
     } else {
       return res.status(502).json({ result: 'OpenAI returned no image data' });
     }

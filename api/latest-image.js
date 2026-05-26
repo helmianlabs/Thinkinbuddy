@@ -31,18 +31,37 @@ export default async function handler(req, res) {
   if (!token) return res.status(200).json({ url: null });
 
   try {
-    const { blobs } = await list({ prefix: blobPrefix(userId), limit: 10, token });
+    const { blobs } = await list({ prefix: blobPrefix(userId), limit: 20, token });
     if (!blobs?.length) return res.status(200).json({ url: null });
 
-    // Newest first.
-    blobs.sort((a, b) => timestampFromKey(b.pathname) - timestampFromKey(a.pathname));
-    const newest = blobs[0];
+    // Newest .png first. Sidecar .meta.json files have ts=0 so they sort last.
+    const pngs = blobs.filter(b => /\.png$/.test(b.pathname));
+    if (!pngs.length) return res.status(200).json({ url: null });
+    pngs.sort((a, b) => timestampFromKey(b.pathname) - timestampFromKey(a.pathname));
+    const newest = pngs[0];
     const timestamp = timestampFromKey(newest.pathname);
 
     if (timestamp <= since) {
       return res.status(200).json({ url: null });
     }
-    return res.status(200).json({ url: newest.url, timestamp });
+
+    // Look up matching sidecar for caption. Cheap — already in the list result.
+    let prompt = '';
+    const sidecarPath = newest.pathname.replace(/\.png$/, '.meta.json');
+    const sidecar = blobs.find(b => b.pathname === sidecarPath);
+    if (sidecar) {
+      try {
+        const r = await fetch(sidecar.url);
+        if (r.ok) {
+          const meta = await r.json();
+          prompt = meta?.prompt || '';
+        }
+      } catch (err) {
+        // Caption is non-essential; image still renders without it.
+      }
+    }
+
+    return res.status(200).json({ url: newest.url, timestamp, prompt });
   } catch (err) {
     console.error('[latest-image] list failed:', err?.message || err);
     return res.status(200).json({ url: null });
