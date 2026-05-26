@@ -3,7 +3,7 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "functions": {
-    "api/image.js": { "maxDuration": 60 },
+    "api/image.js": { "maxDuration": 300 },
     "api/extract-memories.js": { "maxDuration": 30 },
     "api/browse.js": { "maxDuration": 30 },
     "api/search.js": { "maxDuration": 30 }
