@@ -406,6 +406,13 @@
       };
       const userOnMessage = cfg.onMessage;
       cfg.onMessage = (msg) => {
+        // Capture conversationId from the message itself — onConnect isn't firing in this widget version.
+        const cid = msg?.conversation_id || msg?.conversationId || msg?.conversation?.id || msg?.session_id || msg?.sessionId || null;
+        if (cid && !lastConversationId) {
+          lastConversationId = cid;
+          console.log('[MEM-HB] captured conversationId from onMessage:', lastConversationId);
+        }
+        if (!lastConversationId) console.log('[MEM-HB] onMessage but NO conversationId — msg shape:', Object.keys(msg || {}));
         console.log('[MEM-HB] onMessage fired — resetting idle timer');
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
