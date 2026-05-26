@@ -9,7 +9,7 @@
 // Frontend fires this fire-and-forget on `elevenlabs-convai:call-ended`.
 // Response status is for debugging — the client ignores it.
 
-import { put, list } from '@vercel/blob';
+import { put, list, del } from '@vercel/blob';
 
 const blobPrefix = (userId) => `thinkinbuddy/memory/${userId}/`;
 
@@ -35,6 +35,18 @@ async function writeMemory(data) {
     JSON.stringify(data),
     { access: 'public', contentType: 'application/json', addRandomSuffix: false, token }
   );
+  // Prune: keep only the 3 most recent blobs for this user.
+  try {
+    const { blobs } = await list({ prefix: blobPrefix(data.userId), token });
+    blobs.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+    const stale = blobs.slice(3);
+    if (stale.length > 0) {
+      await del(stale.map(b => b.url), { token });
+      console.log(`[extract-memories] pruned ${stale.length} old blob(s) for user ${data.userId}`);
+    }
+  } catch (err) {
+    console.error('[extract-memories] blob pruning failed (non-fatal):', err?.message || err);
+  }
 }
 
 async function fetchTranscript(conversationId, elevenKey) {
