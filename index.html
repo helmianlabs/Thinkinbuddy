@@ -729,16 +729,16 @@
       const img = document.getElementById('mediaImg');
       const vid = document.getElementById('mediaVideo');
       const cap = document.getElementById('mediaCaption');
+      const btn = document.getElementById('mediaCloseBtn');
       if (!area || !vid) return;
       if (img) { img.style.display = 'none'; img.src = ''; }
       vid.src = url;
-      vid.style.display = 'block';
-      // Explicit play() handles browsers that won't auto-restart on src swap.
+      // Fullscreen overlay
+      area.style.cssText = 'display:flex; position:fixed; inset:0; width:100vw; height:100vh; max-width:none; margin:0; padding:0; z-index:50; background:#000; align-items:center; justify-content:center;';
+      vid.style.cssText = 'display:block; width:100vw; height:100vh; object-fit:contain; border-radius:0; border:none; background:#000;';
+      if (btn) btn.style.cssText = 'position:fixed; top:16px; right:16px; width:44px; height:44px; border-radius:50%; border:1px solid rgba(0,212,255,0.6); background:rgba(0,0,0,0.85); color:#00d4ff; font-size:1.2rem; font-family:monospace; cursor:pointer; z-index:51; display:flex; align-items:center; justify-content:center; padding:0;';
       try { vid.play().catch(() => {}); } catch {}
-      area.style.display = 'flex';
-      area.style.flexDirection = 'column';
-      area.style.alignItems = 'center';
-      if (cap) cap.textContent = caption || '';
+      if (cap) cap.textContent = '';
     }
 
     function hideMedia() {
@@ -746,9 +746,11 @@
       const img = document.getElementById('mediaImg');
       const vid = document.getElementById('mediaVideo');
       const cap = document.getElementById('mediaCaption');
-      if (area) area.style.display = 'none';
+      const btn = document.getElementById('mediaCloseBtn');
+      if (area) area.style.cssText = 'display:none; z-index:2; max-width:340px; width:90%; margin-top:20px; position:relative;';
       if (img) { img.style.display = 'none'; img.src = ''; }
-      if (vid) { try { vid.pause(); } catch {} vid.style.display = 'none'; vid.src = ''; }
+      if (vid) { try { vid.pause(); } catch {} vid.style.cssText = 'width:100%; border-radius:12px; border:1px solid rgba(0,212,255,0.3); display:none;'; vid.src = ''; }
+      if (btn) btn.style.cssText = 'position:absolute; top:-10px; right:-10px; width:32px; height:32px; border-radius:50%; border:1px solid rgba(0,212,255,0.5); background:rgba(0,0,0,0.85); color:#00d4ff; font-size:1rem; font-family:monospace; cursor:pointer; z-index:3; display:flex; align-items:center; justify-content:center; padding:0;';
       if (cap) cap.textContent = '';
     }
 
