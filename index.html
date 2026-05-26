@@ -326,21 +326,64 @@
     // /troy/ and reads come from a random localStorage ID — the buddy never
     // sees what it stored. TODO: when we add real auth, plumb the real user
     // identity through the save_memory tool params too.
-    document.addEventListener('elevenlabs-convai:call-ended', async (e) => {
-      stopImagePoller();
-      const conversationId = e.detail?.conversation_id || e.detail?.conversationId;
-      if (!conversationId) return;
+    //
+    // IMPORTANT: the ElevenLabs widget bundle (elevenlabs.io/convai-widget/index.js)
+    // does NOT dispatch `elevenlabs-convai:call-ended` or `:call-started` events —
+    // the only DOM event it emits is `elevenlabs-convai:call` (pre-connect, with
+    // a mutable detail.config). The widget overrides onDisconnect on the
+    // underlying Conversation SDK, so we can't hook disconnect via config either.
+    //
+    // Workaround: inject `onConnect` into detail.config (NOT overridden by widget)
+    // to capture conversationId, then fire extract-memories on pagehide AND on a
+    // long-idle debounce after the last onMessage. extract-memories pulls the
+    // transcript from the ElevenLabs API itself, so it's safe to fire while the
+    // call is still technically open — the transcript is read-only at that point.
+    let lastConversationId = null;
+    let extractFired = false;
+    let idleTimer = null;
+    const IDLE_MS = 45000; // 45s of silence = call effectively ended
+
+    function fireExtractMemories(reason) {
+      if (extractFired || !lastConversationId) return;
+      extractFired = true;
       try {
         fetch('/api/extract-memories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: 'troy', conversationId }),
+          body: JSON.stringify({ userId: 'troy', conversationId: lastConversationId }),
+          keepalive: true, // survives pagehide
         });
-      } catch {}
+        console.log('[ThinkinBuddy] extract-memories fired:', reason, lastConversationId);
+      } catch (e) { console.warn('[ThinkinBuddy] extract-memories failed', e); }
+    }
+
+    document.addEventListener('elevenlabs-convai:call', (e) => {
+      startImagePoller();
+      extractFired = false;
+      lastConversationId = null;
+      const cfg = e.detail?.config;
+      if (!cfg) return;
+      const userOnConnect = cfg.onConnect;
+      cfg.onConnect = (info) => {
+        lastConversationId = info?.conversationId || null;
+        console.log('[ThinkinBuddy] call connected:', lastConversationId);
+        if (typeof userOnConnect === 'function') try { userOnConnect(info); } catch {}
+      };
+      const userOnMessage = cfg.onMessage;
+      cfg.onMessage = (msg) => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          stopImagePoller();
+          fireExtractMemories('idle-timeout');
+        }, IDLE_MS);
+        if (typeof userOnMessage === 'function') try { userOnMessage(msg); } catch {}
+      };
     });
 
-    document.addEventListener('elevenlabs-convai:call-started', startImagePoller);
-    document.addEventListener('elevenlabs-convai:call-ended', stopImagePoller);
+    window.addEventListener('pagehide', () => {
+      stopImagePoller();
+      fireExtractMemories('pagehide');
+    });
   </script>
 
   <script>
