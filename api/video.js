@@ -10,6 +10,7 @@
 // in ElevenLabs makes this explicit so the agent sets expectations up-front.
 
 import { put } from '@vercel/blob';
+import { requireWebhookSecret } from '../lib/security.js';
 
 const RUNWAY_BASE = 'https://api.dev.runwayml.com/v1';
 const RUNWAY_VERSION = '2024-11-06';
@@ -25,10 +26,12 @@ const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
 export const maxDuration = 300;
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  // Shared-secret gate. Called server-to-server by the ElevenLabs agent
+  // as a tool webhook — no browser, so CORS is the wrong gate. The agent
+  // config must send X-Webhook-Secret matching WEBHOOK_SECRET. Runway
+  // calls are EXPENSIVE so this hole was the highest billing risk.
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (!requireWebhookSecret(req, res)) return;
 
   const prompt = req.body?.prompt || req.query?.prompt;
   if (!prompt) return res.status(400).json({ result: 'prompt required' });

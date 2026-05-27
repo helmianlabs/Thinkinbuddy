@@ -5,13 +5,19 @@
 // we expose the [ACTION:*] tag protocol instead of the tool block.
 
 import { buildSystemPrompt } from '../lib/personality.js';
+import { applyBrowserCors } from '../lib/security.js';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // Origin allowlist — replaces the previous `*` wildcard that let
+  // anyone with the URL spend Troy's Anthropic credits.
+  const originOk = applyBrowserCors(req, res);
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method === 'OPTIONS') {
+    return res.status(originOk ? 200 : 403).end();
+  }
+  if (!originOk) {
+    return res.status(403).json({ error: 'Origin not allowed' });
+  }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { messages, userContext } = req.body || {};

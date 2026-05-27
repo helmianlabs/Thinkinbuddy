@@ -7,15 +7,19 @@
 // instances (replaces the broken in-memory global).
 
 import { put } from '@vercel/blob';
+import { requireWebhookSecret } from '../lib/security.js';
 
 const MODEL = 'gpt-image-2';
 const blobPrefix = (userId) => `thinkinbuddy/images/${userId}/`;
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  // Shared-secret gate. This endpoint is invoked server-to-server by the
+  // ElevenLabs agent as a tool webhook — no browser, so Origin/CORS is
+  // the wrong gate. The agent config must send X-Webhook-Secret matching
+  // the WEBHOOK_SECRET env var. No header reflection / no CORS — calling
+  // this from a browser was never supported anyway.
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (!requireWebhookSecret(req, res)) return;
 
   const prompt = req.body?.prompt || req.query?.prompt;
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
