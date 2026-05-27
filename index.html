@@ -345,12 +345,16 @@
 
     // When call ends: fetch transcript via ElevenLabs API, extract facts with Claude, save to memory.
     //
-    // NOTE: userId is hardcoded to 'troy' across the front-end (here AND in the
-    // /api/prime-agent call below) to match the same default used by the
-    // save_memory ElevenLabs tool. Without this, save_memory writes go to
-    // /troy/ and reads come from a random localStorage ID — the buddy never
-    // sees what it stored. TODO: when we add real auth, plumb the real user
-    // identity through the save_memory tool params too.
+    // NOTE: userId comes from currentUser.userId (the random localStorage ID
+    // generated at onboarding). Both extract-memories and prime-agent now use
+    // this real ID, so each user's memory is isolated in their own Blob prefix.
+    //
+    // REMAINING LIMITATION: The ElevenLabs save_memory tool posts to
+    // /api/memory without a userId in its body, so that path still falls back
+    // to 'troy' (server-side default in memory.js:53). Fix requires adding
+    // userId to the save_memory tool's parameter schema in the ElevenLabs
+    // agent config — out of scope for this change.
+    // TODO: plumb userId through the ElevenLabs save_memory tool params.
     //
     // IMPORTANT: the ElevenLabs widget bundle (elevenlabs.io/convai-widget/index.js)
     // does NOT dispatch `elevenlabs-convai:call-ended` or `:call-started` events —
@@ -379,7 +383,7 @@
         fetch('/api/extract-memories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: 'troy', conversationId: lastConversationId }),
+          body: JSON.stringify({ userId: currentUser?.userId || 'troy', conversationId: lastConversationId }),
           keepalive: true,
         });
         console.log('[MEM-HB] extract-memories POSTed:', reason, lastConversationId);
@@ -674,8 +678,9 @@
       const buddyName = user.buddyName || 'ThinkinBuddy';
 
       // Prime the agent: patch system prompt with this user's memories.
-      // userId is forced to 'troy' to match the save_memory tool's default
-      // — see the note on the call-ended handler below for the full story.
+      // userId is now the real localStorage ID (user.userId) so each user
+      // reads their own Blob prefix. See comment above fireExtractMemories
+      // for the remaining ElevenLabs save_memory limitation.
       try {
         const primeRes = await fetch('/api/prime-agent', {
           method: 'POST',
@@ -683,7 +688,7 @@
           body: JSON.stringify({
             buddyName,
             userName: user.name,
-            userId: 'troy',
+            userId: user.userId,
           }),
         });
         const p = await primeRes.json();
