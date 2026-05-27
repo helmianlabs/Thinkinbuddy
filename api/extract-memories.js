@@ -163,7 +163,10 @@ export default async function handler(req, res) {
     }
 
     if (transcript.length === 0) {
-      return res.status(200).json({ ok: true, extracted: 0, reason: 'empty transcript' });
+      // 425 Too Early — transcript not yet finalized. Client should treat as "not done yet" and re-fire on the
+      // next terminal event (disconnect/pagehide). Returning 200 caused extractFired to latch and the real
+      // end-of-call write to be skipped.
+      return res.status(425).json({ ok: false, extracted: 0, reason: 'empty transcript' });
     }
 
     const fresh = await extractFacts(transcript, anthropicKey);

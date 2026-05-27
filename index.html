@@ -371,7 +371,10 @@
     function fireExtractMemories(reason) {
       if (extractFired) { console.log('[MEM-HB] fire skipped — already fired:', reason); return; }
       if (!lastConversationId) { console.log('[MEM-HB] fire skipped — no conversationId yet:', reason); return; }
-      extractFired = true;
+      // Only latch on terminal events. idle-timeout fires mid-call when the transcript is still empty/partial,
+      // returns 0 facts, and was incorrectly suppressing the real disconnect re-fire. The 425 response on empty
+      // transcript is the server-side half of this fix; together they let the real call-end persist memory.
+      if (reason === 'disconnect' || reason === 'pagehide') extractFired = true;
       try {
         fetch('/api/extract-memories', {
           method: 'POST',
