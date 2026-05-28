@@ -1,21 +1,30 @@
 // api/prime-agent.js — called when the page loads.
 //
 // Reads the user's persisted memories from Vercel Blob (same path memory.js
-// writes to) and PATCHes the ElevenLabs ConvAI agent's system prompt so the
-// agent boots already knowing the user's facts.
+// writes to) and RETURNS the per-user system prompt to the CLIENT as JSON.
+// The client applies it as a per-SESSION override on the ElevenLabs ConvAI
+// widget (event.detail.config.overrides.agent.prompt.prompt) so each user's
+// facts stay scoped to THEIR call only.
 //
 // The personality string comes from lib/personality.js — single source of
 // truth. Do NOT inline a prompt here.
 //
-// NOTE: the ElevenLabs agent prompt is GLOBAL (one prompt across all users
-// who hit this agent). Fine for single-user / single-tenant use. For real
-// multi-user, switch the client to per-session overrides via
-// Conversation.startSession({ overrides }) like script.js does.
+// ISOLATION FIX (2026-05-27): previously this endpoint PATCHed ONE GLOBAL
+// agent's prompt on every page load, so the last user to load the page
+// overwrote the shared prompt and every other live caller saw their facts
+// (cross-user leak). We no longer mutate the shared agent at all — the prompt
+// is returned to the client and applied per-session via the widget's
+// `elevenlabs-convai:call` event (the SDK ships it as
+// conversation_config_override on that session's socket only). This mirrors
+// what script.js does with Conversation.startSession({ overrides }).
+//
+// NOTE: per-session prompt override requires "Overrides → System prompt" to be
+// ENABLED in the ElevenLabs dashboard for this agent (Agent → Security tab).
+// If that toggle is off, ElevenLabs ignores the override and falls back to the
+// agent's saved prompt. This is a required one-time manual dashboard step.
 
 import { list } from '@vercel/blob';
 import { buildSystemPrompt } from '../lib/personality.js';
-
-const AGENT_ID = 'agent_4401kqcb0w2dey28c69zhchv7ayn';
 
 const blobPrefix = (userId) => `thinkinbuddy/memory/${userId}/`;
 
@@ -45,10 +54,14 @@ export default async function handler(req, res) {
 
   const buddyName = req.body?.buddyName || 'ThinkinBuddy';
   const userName = req.body?.userName || null;
-  const userId = req.body?.userId || 'troy';
+  const userId = req.body?.userId;
 
-  const elevenKey = process.env.ELEVENLABS_API_KEY;
-  if (!elevenKey) return res.status(500).json({ error: 'ELEVENLABS_API_KEY not set' });
+  // Isolation: a missing userId can no longer silently collapse onto 'troy'
+  // and read someone else's blob prefix. The client always sends the real
+  // per-user localStorage id (index.html initApp -> user.userId).
+  if (!userId || typeof userId !== 'string') {
+    return res.status(400).json({ ok: false, error: 'userId required' });
+  }
 
   const facts = await getMemories(userId);
 
@@ -62,20 +75,9 @@ export default async function handler(req, res) {
     includeActionTags: false,
   });
 
-  try {
-    const r = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${AGENT_ID}`, {
-      method: 'PATCH',
-      headers: { 'xi-api-key': elevenKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversation_config: { agent: { prompt: { prompt } } } }),
-    });
-    if (!r.ok) {
-      const err = await r.text();
-      console.error('[prime-agent] PATCH failed:', r.status, err.slice(0, 200));
-      return res.status(502).json({ ok: false, status: r.status, error: err.slice(0, 200) });
-    }
-    return res.status(200).json({ ok: true, memoryCount: facts.length, buddyName, userId });
-  } catch (err) {
-    console.error('[prime-agent] PATCH error:', err?.message || err);
-    return res.status(502).json({ ok: false, error: String(err?.message || err) });
-  }
+  // Return the per-user prompt to the client. The client sets it on the
+  // widget's per-session override (overrides.agent.prompt.prompt) so user A's
+  // facts never touch the shared agent and never reach user B's session.
+  // We do NOT PATCH the global agent anymore.
+  return res.status(200).json({ ok: true, prompt, memoryCount: facts.length, buddyName, userId });
 }

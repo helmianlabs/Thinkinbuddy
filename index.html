@@ -372,6 +372,12 @@
     let idleTimer = null;
     const IDLE_MS = 45000; // 45s of silence = call effectively ended
 
+    // Per-session system prompt for the CURRENT user, built server-side by
+    // /api/prime-agent from their own memories. Applied as a per-session
+    // override on the widget's elevenlabs-convai:call event so user A's facts
+    // never reach user B's session. Set in initApp(); null until primed.
+    let sessionPromptOverride = null;
+
     function fireExtractMemories(reason) {
       if (extractFired) { console.log('[MEM-HB] fire skipped — already fired:', reason); return; }
       if (!lastConversationId) { console.log('[MEM-HB] fire skipped — no conversationId yet:', reason); return; }
@@ -379,11 +385,14 @@
       // returns 0 facts, and was incorrectly suppressing the real disconnect re-fire. The 425 response on empty
       // transcript is the server-side half of this fix; together they let the real call-end persist memory.
       if (reason === 'disconnect' || reason === 'pagehide') extractFired = true;
+      // Isolation: never fall back to 'troy'. If we somehow have no real
+      // user id, skip the write rather than persist into another user's prefix.
+      if (!currentUser?.userId) { console.warn('[MEM-HB] fire skipped — no currentUser.userId:', reason); return; }
       try {
         fetch('/api/extract-memories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: currentUser?.userId || 'troy', conversationId: lastConversationId }),
+          body: JSON.stringify({ userId: currentUser.userId, conversationId: lastConversationId }),
           keepalive: true,
         });
         console.log('[MEM-HB] extract-memories POSTed:', reason, lastConversationId);
@@ -405,6 +414,38 @@
       lastConversationId = null;
       const cfg = e.detail?.config;
       if (!cfg) { console.warn('[MEM-HB] BAIL — no e.detail.config, cannot inject onConnect'); return; }
+
+      // ── PER-USER ISOLATION ──────────────────────────────────────────────
+      // Apply THIS user's prompt (with only THEIR memories) as a per-session
+      // override scoped to this call's socket. SDK ships cfg.overrides.agent.
+      // prompt.prompt as conversation_config_override on this session only —
+      // it never mutates the shared agent, so user A's facts can't leak into
+      // user B's session. Verified: @elevenlabs/client BaseConnection.d.ts:20-25
+      // (overrides.agent.prompt: { prompt?: string }) + lib.iife.js:457-461
+      // (config.overrides.agent.prompt -> conversation_config_override.agent.prompt).
+      // REQUIRES "Overrides → System prompt" enabled in the agent's Security tab.
+      if (sessionPromptOverride) {
+        cfg.overrides = cfg.overrides || {};
+        cfg.overrides.agent = cfg.overrides.agent || {};
+        cfg.overrides.agent.prompt = { ...(cfg.overrides.agent.prompt || {}), prompt: sessionPromptOverride };
+        console.log('[MEM-HB] applied per-session prompt override — len:', sessionPromptOverride.length);
+      } else {
+        console.warn('[MEM-HB] no sessionPromptOverride set — agent will use its default (non-personalized) prompt');
+      }
+
+      // Expose this user's id to the agent's tools as a dynamic variable.
+      // SDK ships this as dynamic_variables on the session (verified:
+      // @elevenlabs/client lib.iife.js:472 `overridesEvent.dynamic_variables`).
+      // DASHBOARD STEP REQUIRED: edit the agent's `save_memory` webhook tool
+      // (Agent → Tools → save_memory) to add a `userId` body param bound to
+      // {{user_id}} so in-call saves post to THIS user's prefix instead of
+      // /api/memory's now-removed 'troy' default. Until that schema edit ships,
+      // in-call save_memory calls will 400 (safe failure) rather than leak.
+      if (currentUser?.userId) {
+        cfg.dynamicVariables = { ...(cfg.dynamicVariables || {}), user_id: currentUser.userId };
+        console.log('[MEM-HB] set dynamicVariables.user_id for in-call tools');
+      }
+
       const userOnConnect = cfg.onConnect;
       cfg.onConnect = (info) => {
         lastConversationId = info?.conversationId || null;
@@ -677,10 +718,13 @@
 
       const buddyName = user.buddyName || 'ThinkinBuddy';
 
-      // Prime the agent: patch system prompt with this user's memories.
-      // userId is now the real localStorage ID (user.userId) so each user
-      // reads their own Blob prefix. See comment above fireExtractMemories
-      // for the remaining ElevenLabs save_memory limitation.
+      // Prime the agent: fetch THIS user's per-session system prompt (built
+      // server-side from their own Blob prefix) and stash it so the widget's
+      // elevenlabs-convai:call handler can apply it as a PER-SESSION override.
+      // We no longer PATCH a shared global agent — that leaked facts across
+      // users (last-writer-wins). userId is the real localStorage ID so each
+      // user reads only their own memories.
+      sessionPromptOverride = null;
       try {
         const primeRes = await fetch('/api/prime-agent', {
           method: 'POST',
@@ -692,7 +736,10 @@
           }),
         });
         const p = await primeRes.json();
-        console.log('[ThinkinBuddy] primed — memories:', p.memoryCount, 'buddy:', p.buddyName, 'user:', p.userId);
+        if (p?.ok && typeof p.prompt === 'string') {
+          sessionPromptOverride = p.prompt;
+        }
+        console.log('[ThinkinBuddy] primed — memories:', p.memoryCount, 'buddy:', p.buddyName, 'user:', p.userId, 'promptLen:', sessionPromptOverride?.length || 0);
       } catch (e) { console.warn('[ThinkinBuddy] prime failed', e); }
 
       // Create widget after agent is primed

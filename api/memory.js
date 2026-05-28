@@ -3,6 +3,20 @@
 // Uses timestamped blob keys so each write creates a NEW blob URL.
 // CDN never has a cached version of the latest data — reads are always fresh.
 // list() fetches the most recently uploaded blob for the user.
+//
+// ISOLATION (2026-05-27): every method now REQUIRES an explicit userId. We no
+// longer silently default to 'troy' — a missing userId used to make every
+// anonymous/in-call write land in troy's prefix and every read return troy's
+// facts (cross-user leak). Callers MUST pass userId (query or body).
+//
+// IN-CALL save_memory TOOL — REQUIRED DASHBOARD CHANGE:
+// The ElevenLabs agent's `save_memory` webhook tool must be edited (Agent →
+// Tools → save_memory) to pass the user id. Add a `userId` parameter to the
+// tool's body schema (type string, required) and bind it to the dynamic
+// variable the client sets per session (see index.html — userId is passed via
+// the session override's dynamicVariables / the tool body). Until that schema
+// change ships, in-call saves will now 400 instead of silently writing to the
+// wrong user — which is the safe failure for an isolation bug.
 
 import { put, list, del } from '@vercel/blob';
 
@@ -44,13 +58,15 @@ export default async function handler(req, res) {
   if (!token) return res.status(500).json({ error: 'Blob not configured' });
 
   if (req.method === 'GET') {
-    const userId = req.query.userId || 'troy';
+    const userId = req.query.userId;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
     return res.status(200).json(await readMemory(userId));
   }
 
   if (req.method === 'POST') {
     const { key, value } = req.body || {};
-    const userId = req.body?.userId || req.query?.userId || 'troy';
+    const userId = req.body?.userId || req.query?.userId;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
     if (!key || !value) return res.status(400).json({ error: 'key and value required' });
     try {
       const memory = await readMemory(userId);
@@ -67,7 +83,8 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'DELETE') {
-    const { userId = 'troy', key } = req.query;
+    const { userId, key } = req.query;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
     if (!key) return res.status(400).json({ error: 'key required' });
     try {
       const memory = await readMemory(userId);
