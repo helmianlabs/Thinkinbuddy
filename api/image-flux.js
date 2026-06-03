@@ -10,10 +10,12 @@ import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../lib/security.js';
 
 // Replicate model slugs for the three FLUX tiers.
+// Mark's voice spec 2026-06-02: pro = flux-2-pro (latest). Keeping schnell/dev
+// on Flux 1.x because the v2 schnell/dev variants aren't on Replicate yet.
 const QUALITY_TO_MODEL = {
   fast: 'black-forest-labs/flux-schnell',
   dev:  'black-forest-labs/flux-dev',
-  pro:  'black-forest-labs/flux-1.1-pro',
+  pro:  'black-forest-labs/flux-2-pro',
 };
 
 const ASPECT_TO_RATIO = {

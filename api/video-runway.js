@@ -8,7 +8,7 @@
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../lib/security.js';
 
-const MODEL = 'gen3a_turbo'; // gen3a_turbo is cheapest/fastest; gen4 for higher quality
+const MODEL = 'gen4_turbo'; // Mark's spec: Gen-4. Was gen3a_turbo; bumped per voice request 2026-06-02
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
 
 const ASPECT_TO_RATIO = {
