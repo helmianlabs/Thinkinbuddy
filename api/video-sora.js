@@ -14,12 +14,25 @@ import { requireWebhookSecret } from '../lib/security.js';
 const MODEL = 'sora-2';
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
 
-// OpenAI Sora dimensions (preview spec). Defaults to portrait phone fill.
+// OpenAI Sora-2 ONLY accepts these exact sizes — 720x720 is NOT valid and
+// returns "Invalid size". Map square -> portrait (closest phone-friendly).
 const ASPECT_TO_SIZE = {
-  square:    '720x720',
+  square:    '720x1280', // Sora has no square; use portrait
   portrait:  '720x1280',
   landscape: '1280x720',
 };
+
+// Sora-2 ONLY accepts these exact durations. Any other value (e.g. the old
+// default of 5, or "10") returns "Invalid seconds". Snap to the nearest valid.
+const VALID_SORA_SECONDS = [4, 8, 12];
+function snapSeconds(raw) {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n)) return 4;
+  // pick the closest allowed value
+  return VALID_SORA_SECONDS.reduce((best, v) =>
+    Math.abs(v - n) < Math.abs(best - n) ? v : best,
+  VALID_SORA_SECONDS[0]);
+}
 
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -31,7 +44,7 @@ export default async function handler(req, res) {
   const userId = req.body?.userId || req.query?.userId || 'anonymous';
   const aspect = (req.body?.aspect || 'portrait').toLowerCase();
   const size = ASPECT_TO_SIZE[aspect] || ASPECT_TO_SIZE.portrait;
-  const seconds = Math.min(Math.max(parseInt(req.body?.seconds || 5, 10), 4), 12);
+  const seconds = snapSeconds(req.body?.seconds ?? 4);
 
   const apiKey = process.env.OPENAI_API_KEY;
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
