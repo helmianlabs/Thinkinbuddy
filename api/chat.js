@@ -20,7 +20,8 @@ export default async function handler(req, res) {
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { messages, userContext } = req.body || {};
+  const { messages, userContext, mode: rawMode } = req.body || {};
+  const mode = rawMode === 'spanish_tutor' ? 'spanish_tutor' : 'default';
   if (!messages?.length) return res.status(400).json({ error: 'messages required' });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -32,6 +33,7 @@ export default async function handler(req, res) {
     memories: userContext?.memories || [],
     includeToolsBlock: false,   // no webhook tools on this surface
     includeActionTags: true,    // text path uses ACTION tags as its "tools"
+    mode,
   });
 
   try {
