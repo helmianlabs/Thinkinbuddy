@@ -93,57 +93,33 @@ export default async function handler(req, res) {
     const jobId = job?.id;
     if (!jobId) return res.status(502).json({ result: 'Sora returned no job id' });
 
-    // Step 2: poll for completion (cap at ~3 min — videos finish within that window).
-    let status = job.status || 'queued';
-    let finalJob = job;
-    const deadline = Date.now() + 180000;
-    while (Date.now() < deadline && status !== 'completed' && status !== 'failed') {
-      await new Promise((r) => setTimeout(r, 4000));
-      const poll = await fetch(`https://api.openai.com/v1/videos/${jobId}`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      if (!poll.ok) break;
-      finalJob = await poll.json();
-      status = finalJob?.status || status;
-    }
-
-    if (status !== 'completed') {
-      return res.status(504).json({ result: `Sora video still ${status} after timeout` });
-    }
-
-    // Step 3: download the result MP4 + rehost to Blob for widget display.
-    const contentUrl = await fetch(
-      `https://api.openai.com/v1/videos/${jobId}/content`,
-      { headers: { Authorization: `Bearer ${apiKey}` } },
-    );
-    if (!contentUrl.ok) {
-      return res.status(502).json({ result: 'Sora content download failed' });
-    }
-    const buf = Buffer.from(await contentUrl.arrayBuffer());
+    // KICK-AND-RETURN. We do NOT poll-to-completion here — video gen takes
+    // minutes and the serverless function times out (~10s plan cap) → 504.
+    // Instead we write a pending marker to Blob and return immediately. The
+    // widget's video poller hits /api/latest-video every 3s, which finalizes
+    // any completed Sora job (downloads MP4 → Blob) and serves it. So the
+    // video appears in the widget shortly after it finishes, no 504.
     const ts = Date.now();
-    const key = `${blobPrefix(userId)}${ts}.mp4`;
-    const blob = await put(key, buf, {
-      access: 'public',
-      contentType: 'video/mp4',
-      addRandomSuffix: false,
-      token: blobToken,
-    });
-
+    const pendingKey = `${blobPrefix(userId)}pending-${jobId}.json`;
     try {
       await put(
-        `${blobPrefix(userId)}${ts}.meta.json`,
-        JSON.stringify({ prompt, provider: 'sora', size, seconds }),
+        pendingKey,
+        JSON.stringify({ jobId, prompt, provider: 'sora', size, seconds, userId, createdAt: ts }),
         { access: 'public', contentType: 'application/json', addRandomSuffix: false, token: blobToken },
       );
     } catch (err) {
-      console.error('[video-sora] sidecar write failed (non-fatal):', err?.message || err);
+      console.error('[video-sora] pending marker write failed:', err?.message || err);
+      // Non-fatal — finalizer can also discover jobs via OpenAI list, but the
+      // marker is the primary path. Surface as a soft warning to the caller.
     }
 
-    return res.status(200).json({
-      result: 'Video generated.',
-      url: blob.url,
+    // Speakable success — the video is on its way, not done yet.
+    return res.status(202).json({
+      result: 'Video is generating — it will appear on screen in under a minute.',
+      jobId,
       prompt,
       provider: 'sora',
+      pending: true,
     });
   } catch (err) {
     console.error('[video-sora] error:', err?.message || err);
