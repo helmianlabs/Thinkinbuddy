@@ -66,6 +66,100 @@ function vecLiteral(vec) {
   return `[${vec.join(',')}]`;
 }
 
+// Shared helpers for other API routes (prime-agent.js, extract-memories.js).
+// Keep these exports stable — phase 2 of the Neon migration depends on them.
+export { getPool, embed, vecLiteral };
+
+// retrieveMemories: top-N facts for a user, ranked importance DESC then recency.
+// v1: no embedding-similarity query — just importance/recency. Returns the same
+// [{key, value}] shape buildSystemPrompt expects, plus importance/updatedAt for
+// callers that want them.
+// TODO: full cosine-distance recall against a query embedding (spec :130-172).
+export async function retrieveMemories(userId, limit = 30) {
+  if (!userId) return [];
+  const pool = getPool();
+  const { rows } = await pool.query(
+    `SELECT subject AS key,
+            content AS value,
+            importance,
+            updated_at
+       FROM memory_items
+      WHERE user_id = $1
+        AND (valid_until IS NULL OR valid_until > now())
+        AND supersedes IS NULL
+      ORDER BY importance DESC NULLS LAST, updated_at DESC
+      LIMIT $2`,
+    [userId, limit]
+  );
+  return rows.map(r => ({
+    key: r.key,
+    value: r.value,
+    importance: r.importance,
+    updatedAt: r.updated_at?.toISOString?.() || null,
+  }));
+}
+
+// upsertExtractedFact: write path for extract-memories.js. Same semantics as the
+// HTTP POST /api/memory upsertFact, but allows extractor to set importance and
+// source_session. Reuses pool + embed.
+export async function upsertExtractedFact({
+  userId,
+  key,
+  value,
+  importance = 0.5,
+  sourceSession = null,
+}) {
+  return upsertFactInternal(userId, key, value, { importance, sourceSession });
+}
+
+async function upsertFactInternal(userId, key, value, opts = {}) {
+  const pool = getPool();
+  const subject = String(key).slice(0, 120);
+  const content = String(value).slice(0, 500);
+  const importance = typeof opts.importance === 'number' ? opts.importance : 0.5;
+  const sourceSession = opts.sourceSession || null;
+
+  const existing = await pool.query(
+    `SELECT id FROM memory_items
+      WHERE user_id = $1 AND scope = 'semantic' AND kind = 'fact'
+        AND subject = $2 AND supersedes IS NULL
+      LIMIT 1`,
+    [userId, subject]
+  );
+
+  let vec = null;
+  try { vec = await embed(`${subject}: ${content}`); }
+  catch (e) { console.error('[memory] embed failed:', e?.message || e); }
+
+  if (existing.rows.length > 0) {
+    const id = existing.rows[0].id;
+    if (vec) {
+      await pool.query(
+        `UPDATE memory_items
+            SET content = $1, embedding = $2::vector, importance = $3
+          WHERE id = $4`,
+        [content, vecLiteral(vec), importance, id]
+      );
+    } else {
+      await pool.query(
+        `UPDATE memory_items SET content = $1, importance = $2 WHERE id = $3`,
+        [content, importance, id]
+      );
+    }
+    return { id, subject, content, action: 'updated' };
+  }
+
+  const insert = await pool.query(
+    `INSERT INTO memory_items
+       (user_id, scope, kind, subject, content, embedding, confidence, importance, source_session)
+     VALUES ($1, 'semantic', 'fact', $2, $3, ${vec ? '$4::vector' : 'NULL'}, 0.7, ${vec ? '$5' : '$4'}, ${vec ? '$6' : '$5'})
+     RETURNING id`,
+    vec ? [userId, subject, content, vecLiteral(vec), importance, sourceSession]
+        : [userId, subject, content, importance, sourceSession]
+  );
+  return { id: insert.rows[0].id, subject, content, action: 'inserted' };
+}
+
 async function readFacts(userId) {
   const pool = getPool();
   const sql = `
