@@ -8,7 +8,11 @@
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../lib/security.js';
 
-const MODEL = 'gen4_turbo'; // Mark's spec: Gen-4. Was gen3a_turbo; bumped per voice request 2026-06-02
+// gen3a_turbo: supports TEXT-TO-VIDEO (no input image needed).
+// gen4_turbo: IMAGE-TO-VIDEO only — needs a starter image. Mark's "gen 4.5"
+// voice spec was incorrect; gen4 doesn't accept pure text prompts.
+// Bumping back to gen3a_turbo for text-driven generation 2026-06-02.
+const MODEL = 'gen3a_turbo';
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
 
 const ASPECT_TO_RATIO = {
@@ -55,9 +59,16 @@ export default async function handler(req, res) {
 
     if (!startRes.ok) {
       const err = await startRes.json().catch(() => ({}));
-      const msg = err?.error || err?.message || `Runway ${startRes.status}`;
-      console.error('[video-runway] start failed:', msg);
-      return res.status(502).json({ result: `Runway video failed: ${msg}` });
+      // Surface as much detail as Runway returned — generic 'Validation of body
+      // failed' alone hides whether the model, ratio, or duration is at fault.
+      const detail = err?.detail || err?.error?.message || err?.message || '';
+      const msg =
+        (err?.error && typeof err.error === 'string' ? err.error : '') ||
+        `Runway ${startRes.status}`;
+      console.error('[video-runway] start failed:', { status: startRes.status, msg, detail, raw: err });
+      return res.status(502).json({
+        result: `Runway video failed: ${msg}${detail ? ` — ${JSON.stringify(detail).slice(0, 200)}` : ''}`,
+      });
     }
 
     const job = await startRes.json();
