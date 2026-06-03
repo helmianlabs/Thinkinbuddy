@@ -8,12 +8,18 @@
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../lib/security.js';
 
-// Runway text-to-video model. Account tier determines what's available.
-// gen3a_turbo is the older Gen-3 text-to-video model (returned "not available"
-// on Troy's account 2026-06-02 — possibly tier-gated or renamed).
-// veo3 / gen4_aleph / gen4_turbo are image-to-video only on most tiers.
-// We accept body.model to override at call time so the LLM/Troy can pick.
-const DEFAULT_MODEL = 'gen3a_turbo';
+// Runway model variant.
+//
+// 2026-06-02 FINDING — Troy's current Runway tier:
+//   - gen3a_turbo  → "not available" (deprecated or tier-gated)
+//   - gen4_turbo / gen4_aleph / veo3 / seedance / aleph → all require
+//     promptImage (image-to-video only)
+//   - Pure text-to-video is NOT enabled on this account.
+//
+// For pure text prompts → use /api/video-sora (works on Troy's OpenAI tier).
+// To wake Runway up, either upgrade the Runway plan to one that includes
+// text-to-video, OR call this route with a promptImage URL for image-to-video.
+const DEFAULT_MODEL = 'gen4_turbo';
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
 
 const ASPECT_TO_RATIO = {
@@ -53,6 +59,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: req.body?.model || DEFAULT_MODEL,
         promptText: prompt,
+        promptImage: req.body?.promptImage, // image-to-video on Gen-4+
         ratio,
         duration: seconds,
       }),
