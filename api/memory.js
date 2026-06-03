@@ -1,51 +1,147 @@
 // api/memory.js — per-user persistent memory store for ThinkinBuddy.
 //
-// Uses timestamped blob keys so each write creates a NEW blob URL.
-// CDN never has a cached version of the latest data — reads are always fresh.
-// list() fetches the most recently uploaded blob for the user.
+// 2026-06-02: REWRITTEN from Vercel Blob → Neon Postgres + pgvector.
+// Spec: jarvis/docs/persistent-memory-spec-2026-05-27.md
 //
-// ISOLATION (2026-05-27): every method now REQUIRES an explicit userId. We no
-// longer silently default to 'troy' — a missing userId used to make every
-// anonymous/in-call write land in troy's prefix and every read return troy's
-// facts (cross-user leak). Callers MUST pass userId (query or body).
+// HTTP CONTRACT PRESERVED so the ElevenLabs widget's `save_memory` tool keeps
+// working without dashboard changes:
+//   GET    /api/memory?userId=...                  → { userId, facts: [...] }
+//   POST   /api/memory   body { userId, key, value } → { ok, fact }
+//   DELETE /api/memory?userId=...&key=...           → { ok }
 //
-// IN-CALL save_memory TOOL — REQUIRED DASHBOARD CHANGE:
-// The ElevenLabs agent's `save_memory` webhook tool must be edited (Agent →
-// Tools → save_memory) to pass the user id. Add a `userId` parameter to the
-// tool's body schema (type string, required) and bind it to the dynamic
-// variable the client sets per session (see index.html — userId is passed via
-// the session override's dynamicVariables / the tool body). Until that schema
-// change ships, in-call saves will now 400 instead of silently writing to the
-// wrong user — which is the safe failure for an isolation bug.
+// MAPPING legacy {key, value} → spec {subject, content}:
+//   subject ← key (canonical short noun-phrase)
+//   content ← value (the durable fact)
+//   kind    ← 'fact' (default; extractor handles richer kinds)
+//   scope   ← 'semantic'
+//
+// Embeddings via OpenAI text-embedding-3-small (1536 dims).
+// Semantic dedup: skipped for v1 of the rewrite — TODO wire SIM_UPDATE/
+// SIM_CONFLICT_LO logic per spec lines 355-468. Current behavior:
+//   - Same (user_id, scope='semantic', kind='fact', subject=key) → UPDATE.
+//   - Else INSERT new row.
+// This keeps the widget contract idempotent on `key` without LLM round-trips.
 
-import { put, list, del } from '@vercel/blob';
+import { Pool } from 'pg';
+import OpenAI from 'openai';
 
-const blobPrefix = (userId) => `thinkinbuddy/memory/${userId}/`;
+const DB_URL = process.env.DATABASE_URL_MEMORY || process.env.DATABASE_URL;
 
-async function readMemory(userId) {
-  try {
-    const token = process.env.BLOB_READ_WRITE_TOKEN;
-    // Get all blobs for this user, sorted by upload time (newest first)
-    const { blobs } = await list({ prefix: blobPrefix(userId), limit: 5, token });
-    if (!blobs || blobs.length === 0) return { userId, facts: [] };
-    // Most recently uploaded blob is the current memory state
-    blobs.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
-    const res = await fetch(blobs[0].url);
-    if (!res.ok) return { userId, facts: [] };
-    return await res.json();
-  } catch {
-    return { userId, facts: [] };
+// Module-scoped pool — reused across warm Lambda invocations.
+let _pool = null;
+function getPool() {
+  if (!_pool) {
+    if (!DB_URL) throw new Error('DATABASE_URL_MEMORY (or DATABASE_URL) not set');
+    _pool = new Pool({
+      connectionString: DB_URL,
+      max: 3,
+      idleTimeoutMillis: 10_000,
+      ssl: { rejectUnauthorized: false },
+    });
   }
+  return _pool;
 }
 
-async function writeMemory(data) {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  // Write to a NEW timestamped key — CDN will never have a stale cached version
-  await put(
-    `${blobPrefix(data.userId)}${Date.now()}.json`,
-    JSON.stringify(data),
-    { access: 'public', contentType: 'application/json', addRandomSuffix: false, token }
+let _openai = null;
+function getOpenAI() {
+  if (!_openai) {
+    if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not set');
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return _openai;
+}
+
+async function embed(text) {
+  const trimmed = String(text || '').slice(0, 8000);
+  if (!trimmed) return null;
+  const oa = getOpenAI();
+  const res = await oa.embeddings.create({
+    model: 'text-embedding-3-small',
+    input: trimmed,
+  });
+  return res.data[0].embedding;
+}
+
+function vecLiteral(vec) {
+  return `[${vec.join(',')}]`;
+}
+
+async function readFacts(userId) {
+  const pool = getPool();
+  const sql = `
+    SELECT id, subject AS key, content AS value, updated_at, created_at, importance, confidence
+      FROM memory_items
+     WHERE user_id = $1
+       AND scope = 'semantic'
+       AND supersedes IS NULL
+       AND (valid_until IS NULL OR valid_until > now())
+     ORDER BY importance DESC, confidence DESC, updated_at DESC
+  `;
+  const { rows } = await pool.query(sql, [userId]);
+  return rows.map(r => ({
+    key: r.key,
+    value: r.value,
+    savedAt: (r.updated_at || r.created_at)?.toISOString?.() || null,
+  }));
+}
+
+async function upsertFact(userId, key, value) {
+  const pool = getPool();
+  const subject = String(key).slice(0, 120);
+  const content = String(value).slice(0, 500);
+
+  // Try UPDATE-by-subject first (idempotent on legacy {key,value} writes).
+  // Embedding refresh is fire-and-forget on UPDATE to keep the path fast.
+  const existing = await pool.query(
+    `SELECT id FROM memory_items
+      WHERE user_id = $1 AND scope = 'semantic' AND kind = 'fact'
+        AND subject = $2 AND supersedes IS NULL
+      LIMIT 1`,
+    [userId, subject]
   );
+
+  let vec = null;
+  try { vec = await embed(`${subject}: ${content}`); }
+  catch (e) { console.error('[memory] embed failed:', e?.message || e); }
+
+  if (existing.rows.length > 0) {
+    const id = existing.rows[0].id;
+    if (vec) {
+      await pool.query(
+        `UPDATE memory_items
+            SET content = $1, embedding = $2::vector
+          WHERE id = $3`,
+        [content, vecLiteral(vec), id]
+      );
+    } else {
+      await pool.query(
+        `UPDATE memory_items SET content = $1 WHERE id = $2`,
+        [content, id]
+      );
+    }
+    return { id, subject, content, action: 'updated' };
+  }
+
+  const insert = await pool.query(
+    `INSERT INTO memory_items
+       (user_id, scope, kind, subject, content, embedding, confidence, importance)
+     VALUES ($1, 'semantic', 'fact', $2, $3, ${vec ? '$4::vector' : 'NULL'}, 0.7, 0.5)
+     RETURNING id`,
+    vec ? [userId, subject, content, vecLiteral(vec)]
+        : [userId, subject, content]
+  );
+  return { id: insert.rows[0].id, subject, content, action: 'inserted' };
+}
+
+async function deleteFact(userId, key) {
+  const pool = getPool();
+  const subject = String(key).slice(0, 120);
+  const r = await pool.query(
+    `DELETE FROM memory_items
+      WHERE user_id = $1 AND scope = 'semantic' AND subject = $2`,
+    [userId, subject]
+  );
+  return { deleted: r.rowCount };
 }
 
 export default async function handler(req, res) {
@@ -54,48 +150,42 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) return res.status(500).json({ error: 'Blob not configured' });
-
-  if (req.method === 'GET') {
-    const userId = req.query.userId;
-    if (!userId) return res.status(400).json({ error: 'userId required' });
-    return res.status(200).json(await readMemory(userId));
+  if (!DB_URL) {
+    return res.status(500).json({ error: 'memory store not configured (DATABASE_URL_MEMORY missing)' });
   }
 
-  if (req.method === 'POST') {
-    const { key, value } = req.body || {};
-    const userId = req.body?.userId || req.query?.userId;
-    if (!userId) return res.status(400).json({ error: 'userId required' });
-    if (!key || !value) return res.status(400).json({ error: 'key and value required' });
-    try {
-      const memory = await readMemory(userId);
-      const idx = memory.facts.findIndex(f => f.key === key);
-      const fact = { key, value, savedAt: new Date().toISOString() };
-      if (idx >= 0) memory.facts[idx] = fact;
-      else memory.facts.push(fact);
-      memory.lastUpdated = new Date().toISOString();
-      await writeMemory(memory);
-      return res.status(200).json({ ok: true, fact });
-    } catch (err) {
-      return res.status(500).json({ error: err?.message || 'write failed' });
+  try {
+    if (req.method === 'GET') {
+      const userId = req.query.userId;
+      if (!userId) return res.status(400).json({ error: 'userId required' });
+      const facts = await readFacts(userId);
+      return res.status(200).json({ userId, facts });
     }
-  }
 
-  if (req.method === 'DELETE') {
-    const { userId, key } = req.query;
-    if (!userId) return res.status(400).json({ error: 'userId required' });
-    if (!key) return res.status(400).json({ error: 'key required' });
-    try {
-      const memory = await readMemory(userId);
-      memory.facts = memory.facts.filter(f => f.key !== key);
-      memory.lastUpdated = new Date().toISOString();
-      await writeMemory(memory);
+    if (req.method === 'POST') {
+      const { key, value } = req.body || {};
+      const userId = req.body?.userId || req.query?.userId;
+      if (!userId) return res.status(400).json({ error: 'userId required' });
+      if (!key || !value) return res.status(400).json({ error: 'key and value required' });
+      const out = await upsertFact(userId, key, value);
+      return res.status(200).json({
+        ok: true,
+        fact: { key: out.subject, value: out.content, savedAt: new Date().toISOString() },
+        action: out.action,
+      });
+    }
+
+    if (req.method === 'DELETE') {
+      const { userId, key } = req.query;
+      if (!userId) return res.status(400).json({ error: 'userId required' });
+      if (!key) return res.status(400).json({ error: 'key required' });
+      await deleteFact(userId, key);
       return res.status(200).json({ ok: true });
-    } catch (err) {
-      return res.status(500).json({ error: err?.message || 'delete failed' });
     }
-  }
 
-  return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed' });
+  } catch (err) {
+    console.error('[memory] handler error:', err?.message || err);
+    return res.status(500).json({ error: err?.message || 'memory op failed' });
+  }
 }
