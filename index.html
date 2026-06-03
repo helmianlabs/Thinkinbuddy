@@ -563,11 +563,27 @@
       const buddyName = currentUser.buddyName || 'ThinkinBuddy';
       // Update title to show the buddy's name
       document.querySelector('.title').textContent = buddyName.toUpperCase();
-      subtitleEl.textContent = `YOUR THINKING PARTNER — ${currentUser.name.toUpperCase()}`;
+      const mode = window.thinkinBuddyMode || 'default';
+      const modeLabel = mode === 'spanish_tutor' ? ' · 🇪🇸 ESPAÑOL TUTOR' : '';
+      subtitleEl.textContent = `YOUR THINKING PARTNER — ${currentUser.name.toUpperCase()}${modeLabel}`;
+      const tutorToggleHtml =
+        mode === 'spanish_tutor'
+          ? `<a id="tutorOffLink">Switch back to regular buddy</a> · `
+          : `<a id="tutorOnLink">Try Spanish tutor mode</a> · `;
       const consentText = currentUser.consentResearch
         ? `Conversations may be saved for research as previously discussed. <a id="optoutLink">Opt out</a>`
         : `<a id="optinLink">Enable research mode</a>`;
-      footerNoteEl.innerHTML = consentText;
+      footerNoteEl.innerHTML = tutorToggleHtml + consentText;
+      const tutorOn = document.getElementById('tutorOnLink');
+      const tutorOff = document.getElementById('tutorOffLink');
+      if (tutorOn) tutorOn.addEventListener('click', () => {
+        localStorage.setItem('thinkinbuddy_mode_v1', 'spanish_tutor');
+        location.reload();
+      });
+      if (tutorOff) tutorOff.addEventListener('click', () => {
+        localStorage.removeItem('thinkinbuddy_mode_v1');
+        location.reload();
+      });
       const optout = document.getElementById('optoutLink');
       const optin = document.getElementById('optinLink');
       if (optout) optout.addEventListener('click', () => {
@@ -724,6 +740,20 @@
       // We no longer PATCH a shared global agent — that leaked facts across
       // users (last-writer-wins). userId is the real localStorage ID so each
       // user reads only their own memories.
+      // Conversational mode — defaults to 'default' (regular buddy).
+      // Activate Spanish tutor mode via ?tutor=1 in the URL, ?mode=spanish_tutor,
+      // or by clicking the in-page "Spanish Tutor" toggle (which persists to
+      // localStorage). buildSystemPrompt appends the tutor block when mode=spanish_tutor.
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlMode = urlParams.get('mode');
+      const urlTutor = urlParams.get('tutor');
+      const storedMode = localStorage.getItem('thinkinbuddy_mode_v1');
+      let activeMode = 'default';
+      if (urlMode === 'spanish_tutor' || urlTutor === '1') activeMode = 'spanish_tutor';
+      else if (storedMode === 'spanish_tutor') activeMode = 'spanish_tutor';
+      window.thinkinBuddyMode = activeMode;
+      console.log('[ThinkinBuddy] active mode:', activeMode);
+
       sessionPromptOverride = null;
       try {
         const primeRes = await fetch('/api/prime-agent', {
@@ -733,6 +763,7 @@
             buddyName,
             userName: user.name,
             userId: user.userId,
+            mode: activeMode,
           }),
         });
         const p = await primeRes.json();
