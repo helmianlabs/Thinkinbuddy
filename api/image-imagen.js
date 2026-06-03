@@ -12,6 +12,9 @@ import { requireWebhookSecret } from '../lib/security.js';
 const MODEL = 'imagen-4.0-generate-001';
 const blobPrefix = (userId) => `thinkinbuddy/images/${userId}/`;
 
+// Imagen is usually fast, but raise the ceiling so a slow gen never 504s.
+export const config = { maxDuration: 120 };
+
 const ASPECT_TO_RATIO = {
   square:    '1:1',
   portrait:  '9:16',

@@ -14,6 +14,11 @@ import { requireWebhookSecret } from '../lib/security.js';
 const MODEL = 'sora-2';
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
 
+// Video generation + polling takes minutes. Without this, the Vercel function
+// is killed at the platform default (~10-60s) → 504 before the video is ready.
+// 300s is the Pro-plan max. Most 4-12s Sora clips finish well within it.
+export const config = { maxDuration: 300 };
+
 // OpenAI Sora-2 ONLY accepts these exact sizes — 720x720 is NOT valid and
 // returns "Invalid size". Map square -> portrait (closest phone-friendly).
 const ASPECT_TO_SIZE = {
@@ -53,25 +58,35 @@ export default async function handler(req, res) {
 
   try {
     // Step 1: kick off the video generation job (async).
-    const startRes = await fetch('https://api.openai.com/v1/videos', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        prompt,
-        size,
-        seconds: String(seconds),
-      }),
-    });
+    // OpenAI occasionally returns a transient 5xx "Server error" at job
+    // creation — retry up to 3 times with backoff before giving up.
+    let startRes;
+    let startErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      startRes = await fetch('https://api.openai.com/v1/videos', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          prompt,
+          size,
+          seconds: String(seconds),
+        }),
+      });
+      if (startRes.ok) break;
+      const errBody = await startRes.json().catch(() => ({}));
+      startErr = errBody?.error?.message || `OpenAI ${startRes.status}`;
+      // Only retry on 5xx (server-side). 4xx (bad prompt/size) won't fix itself.
+      if (startRes.status < 500) break;
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+    }
 
     if (!startRes.ok) {
-      const err = await startRes.json().catch(() => ({}));
-      const msg = err?.error?.message || `OpenAI ${startRes.status}`;
-      console.error('[video-sora] start failed:', msg);
-      return res.status(502).json({ result: `Sora video failed: ${msg}` });
+      console.error('[video-sora] start failed after retries:', startErr);
+      return res.status(502).json({ result: `Sora video failed: ${startErr}` });
     }
 
     const job = await startRes.json();

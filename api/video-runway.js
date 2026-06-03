@@ -22,6 +22,9 @@ import { requireWebhookSecret } from '../lib/security.js';
 const DEFAULT_MODEL = 'gen4_turbo';
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
 
+// Runway gen + polling takes minutes — raise the function ceiling to avoid 504.
+export const config = { maxDuration: 300 };
+
 const ASPECT_TO_RATIO = {
   portrait:  '720:1280',
   square:    '768:768',

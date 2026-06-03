@@ -26,6 +26,9 @@ const ASPECT_TO_RATIO = {
 
 const blobPrefix = (userId) => `thinkinbuddy/images/${userId}/`;
 
+// FLUX dev/pro can take ~60s; raise the ceiling so it never 504s mid-gen.
+export const config = { maxDuration: 120 };
+
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (!requireWebhookSecret(req, res)) return;
