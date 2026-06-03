@@ -8,11 +8,12 @@
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../lib/security.js';
 
-// gen3a_turbo: supports TEXT-TO-VIDEO (no input image needed).
-// gen4_turbo: IMAGE-TO-VIDEO only — needs a starter image. Mark's "gen 4.5"
-// voice spec was incorrect; gen4 doesn't accept pure text prompts.
-// Bumping back to gen3a_turbo for text-driven generation 2026-06-02.
-const MODEL = 'gen3a_turbo';
+// Runway text-to-video model. Account tier determines what's available.
+// gen3a_turbo is the older Gen-3 text-to-video model (returned "not available"
+// on Troy's account 2026-06-02 — possibly tier-gated or renamed).
+// veo3 / gen4_aleph / gen4_turbo are image-to-video only on most tiers.
+// We accept body.model to override at call time so the LLM/Troy can pick.
+const DEFAULT_MODEL = 'gen3a_turbo';
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
 
 const ASPECT_TO_RATIO = {
@@ -50,7 +51,7 @@ export default async function handler(req, res) {
         'X-Runway-Version': '2024-11-06',
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: req.body?.model || DEFAULT_MODEL,
         promptText: prompt,
         ratio,
         duration: seconds,
