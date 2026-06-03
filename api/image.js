@@ -25,6 +25,23 @@ export default async function handler(req, res) {
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
 
   const userId = req.body?.userId || req.query?.userId || 'anonymous';
+
+  // Aspect: default = portrait phone fill (the widget displays full-screen on
+  // mobile). User / agent can override via body.aspect = 'square' | 'portrait'
+  // | 'landscape', or via raw body.size = '1024x1024' | '1024x1536' | '1536x1024'.
+  // 1024x1536 is the closest portrait OpenAI offers to a phone aspect (2:3).
+  const ASPECT_TO_SIZE = {
+    square:    '1024x1024',
+    portrait:  '1024x1536',
+    landscape: '1536x1024',
+  };
+  const VALID_SIZES = new Set(Object.values(ASPECT_TO_SIZE));
+  let size = '1024x1536'; // default = portrait phone fill
+  const rawSize = req.body?.size || req.query?.size;
+  const rawAspect = (req.body?.aspect || req.query?.aspect || '').toLowerCase();
+  if (rawSize && VALID_SIZES.has(rawSize)) size = rawSize;
+  else if (ASPECT_TO_SIZE[rawAspect]) size = ASPECT_TO_SIZE[rawAspect];
+
   const apiKey = process.env.OPENAI_API_KEY;
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey)    return res.status(500).json({ result: 'OPENAI_API_KEY not configured' });
@@ -41,7 +58,7 @@ export default async function handler(req, res) {
         model: MODEL,
         prompt,
         n: 1,
-        size: '1024x1024',
+        size,
       }),
     });
 
