@@ -7,6 +7,7 @@
 
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../lib/security.js';
+import { isAllowed, SAFE_REFUSAL } from '../lib/moderation.js';
 
 // Runway model variant.
 //
@@ -49,6 +50,13 @@ export default async function handler(req, res) {
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey)    return res.status(500).json({ result: 'RUNWAY_API_KEY not configured' });
   if (!blobToken) return res.status(500).json({ result: 'BLOB_READ_WRITE_TOKEN not configured' });
+
+  // Kid-safe gate: moderate the prompt via OpenAI BEFORE calling Runway.
+  const mod = await isAllowed(prompt, process.env.OPENAI_API_KEY);
+  if (!mod.allowed) {
+    console.warn('[video-runway] prompt blocked by moderation:', mod.reason);
+    return res.status(200).json({ result: SAFE_REFUSAL });
+  }
 
   try {
     // Runway uses text_to_video task creation.

@@ -8,6 +8,7 @@
 
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../lib/security.js';
+import { isAllowed, SAFE_REFUSAL } from '../lib/moderation.js';
 
 // Replicate model slugs for the three FLUX tiers.
 // Mark's voice spec 2026-06-02: pro = flux-2-pro (latest). Keeping schnell/dev
@@ -46,6 +47,13 @@ export default async function handler(req, res) {
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey)    return res.status(500).json({ result: 'REPLICATE_API_TOKEN not configured (get from https://replicate.com/account/api-tokens)' });
   if (!blobToken) return res.status(500).json({ result: 'BLOB_READ_WRITE_TOKEN not configured' });
+
+  // Kid-safe gate: moderate the prompt via OpenAI BEFORE calling Replicate/FLUX.
+  const mod = await isAllowed(prompt, process.env.OPENAI_API_KEY);
+  if (!mod.allowed) {
+    console.warn('[image-flux] prompt blocked by moderation:', mod.reason);
+    return res.status(200).json({ result: SAFE_REFUSAL });
+  }
 
   try {
     // Replicate uses model-versioned predictions; the "models" path resolves the

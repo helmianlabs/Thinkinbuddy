@@ -6,6 +6,7 @@
 
 import { buildSystemPrompt } from '../lib/personality.js';
 import { applyBrowserCors } from '../lib/security.js';
+import { isAllowed } from '../lib/moderation.js';
 
 export default async function handler(req, res) {
   // Origin allowlist — replaces the previous `*` wildcard that let
@@ -26,6 +27,19 @@ export default async function handler(req, res) {
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ reply: 'Anthropic API key not configured.' });
+
+  // Kid-safe gate: moderate the latest user message BEFORE calling Claude.
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  const lastUserText = typeof lastUser?.content === 'string'
+    ? lastUser.content
+    : Array.isArray(lastUser?.content)
+      ? lastUser.content.map((b) => (typeof b === 'string' ? b : b?.text || '')).join(' ')
+      : '';
+  const mod = await isAllowed(lastUserText, process.env.OPENAI_API_KEY);
+  if (!mod.allowed) {
+    console.warn('[chat] user message blocked by moderation:', mod.reason);
+    return res.status(200).json({ reply: "Let's keep it friendly — I'm not going there. What else is on your mind?" });
+  }
 
   const systemPrompt = buildSystemPrompt({
     buddyName: userContext?.buddyName,

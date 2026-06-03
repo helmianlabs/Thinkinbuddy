@@ -8,6 +8,7 @@
 
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../lib/security.js';
+import { isAllowed, SAFE_REFUSAL } from '../lib/moderation.js';
 
 const MODEL = 'imagen-4.0-generate-001';
 const blobPrefix = (userId) => `thinkinbuddy/images/${userId}/`;
@@ -36,6 +37,13 @@ export default async function handler(req, res) {
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey)    return res.status(500).json({ result: 'GOOGLE_API_KEY not configured (get from https://aistudio.google.com/app/apikey)' });
   if (!blobToken) return res.status(500).json({ result: 'BLOB_READ_WRITE_TOKEN not configured' });
+
+  // Kid-safe gate: moderate the prompt via OpenAI BEFORE calling Imagen.
+  const mod = await isAllowed(prompt, process.env.OPENAI_API_KEY);
+  if (!mod.allowed) {
+    console.warn('[image-imagen] prompt blocked by moderation:', mod.reason);
+    return res.status(200).json({ result: SAFE_REFUSAL });
+  }
 
   try {
     const response = await fetch(
