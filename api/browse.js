@@ -6,6 +6,12 @@
 // POST body: { url: string }
 // GET param: ?url=...
 // Response:  { result: string }
+//
+// Kid-safe: refuses adult/unsafe domains (Layer 3 denylist) up front, and
+// moderates the fetched page's main text (Layer 2) before returning it.
+
+import { isSafeUrl, UNSAFE_SITE_MSG } from '../lib/safeBrowse.js';
+import { isAllowed } from '../lib/moderation.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -23,6 +29,13 @@ export default async function handler(req, res) {
     target = new URL(url.startsWith('http') ? url : 'https://' + url);
   } catch {
     return res.status(400).json({ error: 'invalid url' });
+  }
+
+  // Layer 3 — refuse adult/unsafe destinations BEFORE fetching.
+  const urlSafe = isSafeUrl(target.toString());
+  if (!urlSafe.safe) {
+    console.warn('[browse] blocked unsafe url:', target.hostname, urlSafe.reason);
+    return res.status(200).json({ result: UNSAFE_SITE_MSG });
   }
 
   try {
@@ -55,6 +68,14 @@ export default async function handler(req, res) {
       .replace(/\s{2,}/g, ' ')
       .trim()
       .slice(0, 4000); // cap at 4k chars so the agent can digest it
+
+    // Layer 2 — moderate the page's main text (first ~2000 chars) so a
+    // safe-looking domain serving unsafe content still gets refused.
+    const pageMod = await isAllowed(text.slice(0, 2000), process.env.OPENAI_API_KEY);
+    if (!pageMod.allowed) {
+      console.warn('[browse] page content blocked by moderation:', target.hostname, pageMod.reason);
+      return res.status(200).json({ result: UNSAFE_SITE_MSG });
+    }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
