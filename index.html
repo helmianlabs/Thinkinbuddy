@@ -211,6 +211,51 @@
     .settings-panel button.secondary { color: #6b7280; border-color: rgba(107,114,128,0.4); background: transparent; }
     .settings-panel .test-line { font-size: 0.7rem; color: #6b7280; margin-bottom: 12px; }
 
+    /* ─── Export dropdown menu ──────────────────────────────────────── */
+    .export-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      right: 0;
+      background: rgba(5,5,8,0.98);
+      border: 1px solid rgba(0,212,255,0.4);
+      border-radius: 4px;
+      min-width: 160px;
+      box-shadow: 0 4px 24px rgba(0,212,255,0.15);
+      z-index: 20;
+      overflow: hidden;
+    }
+    .export-menu.hidden { display: none; }
+    .export-menu button {
+      display: block; width: 100%;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid rgba(0,212,255,0.1);
+      color: #a0aec0;
+      padding: 10px 14px;
+      text-align: left;
+      font-family: 'Courier New', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border-radius: 0;
+    }
+    .export-menu button:last-child { border-bottom: none; }
+    .export-menu button:hover { color: #00d4ff; background: rgba(0,212,255,0.08); }
+    #exportWrapper { position: relative; }
+
+    /* ─── Print / PDF stylesheet ─────────────────────────────────────── */
+    @media print {
+      body { background: #fff !important; color: #111 !important; display: block !important; height: auto !important; overflow: auto !important; font-family: Georgia, serif !important; padding: 20px !important; }
+      .corner, .actions, .settings-panel, .onboarding, .orb, .status, .transcript, .footer-note, elevenlabs-convai, #widget-mount, #mediaArea, body::before { display: none !important; }
+      #printOutput { display: block !important; }
+      .print-msg { margin-bottom: 14px; }
+      .print-msg .print-role { font-weight: bold; font-size: 0.85rem; margin-bottom: 3px; }
+      .print-msg .print-text { font-size: 0.95rem; line-height: 1.6; white-space: pre-wrap; }
+      .print-header { font-size: 1.1rem; font-weight: bold; margin-bottom: 20px; border-bottom: 1px solid #ccc; padding-bottom: 8px; }
+    }
+
     /* ─── Footer notice ─────────────────────────────────────────────── */
     .footer-note {
       position: fixed; bottom: 50px; left: 0; right: 0;
@@ -264,9 +309,22 @@
   <!-- Top-right actions -->
   <div class="actions">
     <button id="settingsBtn" title="Voice and other settings">⚙ Voice</button>
-    <button id="exportBtn" title="Download this conversation">↓ Export</button>
+    <!-- Export button + dropdown wrapper -->
+    <div id="exportWrapper">
+      <button id="exportBtn" title="Export or share this conversation">↑ Export</button>
+      <div class="export-menu hidden" id="exportMenu">
+        <button id="exportShareBtn">📤 Share…</button>
+        <button id="exportPdfBtn">🖨 PDF / Print</button>
+        <button id="exportMdBtn">↓ Markdown (.md)</button>
+        <button id="exportTxtBtn">↓ Plain text (.txt)</button>
+        <button id="exportCopyBtn">⎘ Copy to clipboard</button>
+      </div>
+    </div>
     <button id="resetBtn" title="Sign out / new user">⟲ Reset</button>
   </div>
+
+  <!-- Hidden print container — only visible during window.print() -->
+  <div id="printOutput" style="display:none;"></div>
 
   <!-- Settings panel (voice picker) -->
   <div class="settings-panel hidden" id="settingsPanel">
@@ -601,29 +659,180 @@
       });
     }
 
-    // ─── Export ───────────────────────────────────────────────────────
-    document.getElementById('exportBtn').addEventListener('click', () => {
+    // ─── Export menu ─────────────────────────────────────────────────
+    const exportMenuEl = document.getElementById('exportMenu');
+    const exportBtnEl  = document.getElementById('exportBtn');
+
+    // Toggle the dropdown open/closed
+    exportBtnEl.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (!currentHistory || currentHistory.length === 0) {
         alert('Nothing to export yet — start a conversation first.');
         return;
       }
-      const date = new Date().toISOString().slice(0, 10);
+      exportMenuEl.classList.toggle('hidden');
+    });
+
+    // Close menu when clicking elsewhere
+    document.addEventListener('click', () => exportMenuEl.classList.add('hidden'));
+    exportMenuEl.addEventListener('click', (e) => e.stopPropagation());
+
+    // ─── Shared helpers ───────────────────────────────────────────────
+    function buildExportText() {
+      const date   = new Date().toISOString().slice(0, 10);
       const userName = currentUser?.name || 'Session';
-      let md = `# ThinkinBuddy session — ${userName} — ${date}\n\n`;
+      const buddyName = currentUser?.buddyName || 'ThinkinBuddy';
+      let txt = `${buddyName.toUpperCase()} SESSION — ${userName} — ${date}\n\n`;
       for (const msg of currentHistory) {
-        const role = msg.role === 'user' ? userName : 'ThinkinBuddy';
-        const cleanContent = (msg.content || '').replace(/\[ACTION:[^\]]+\]/g, '').trim();
-        md += `**${role}:** ${cleanContent}\n\n`;
+        const role = msg.role === 'user' ? userName : buddyName;
+        const clean = (msg.content || '').replace(/\[ACTION:[^\]]+\]/g, '').trim();
+        txt += `${role}: ${clean}\n\n`;
       }
-      const blob = new Blob([md], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `thinkinbuddy-${userName.toLowerCase()}-${date}.md`;
+      // Append any currently-displayed media URLs
+      const imgEl = document.getElementById('mediaImg');
+      const vidEl = document.getElementById('mediaVideo');
+      const imgSrc = imgEl && imgEl.src && !imgEl.src.endsWith(location.origin + '/') ? imgEl.src : null;
+      const vidSrc = vidEl && vidEl.src && !vidEl.src.endsWith(location.origin + '/') ? vidEl.src : null;
+      if (imgSrc) txt += `\n[Image generated this session]: ${imgSrc}\n`;
+      if (vidSrc) txt += `\n[Video generated this session]: ${vidSrc}\n`;
+      return { txt, userName, date, buddyName };
+    }
+
+    function buildMarkdown() {
+      const { txt, userName, date, buddyName } = buildExportText();
+      // Re-build as proper markdown
+      let md = `# ${buddyName} session — ${userName} — ${date}\n\n`;
+      for (const msg of currentHistory) {
+        const role = msg.role === 'user' ? userName : buddyName;
+        const clean = (msg.content || '').replace(/\[ACTION:[^\]]+\]/g, '').trim();
+        md += `**${role}:** ${clean}\n\n`;
+      }
+      const imgEl = document.getElementById('mediaImg');
+      const vidEl = document.getElementById('mediaVideo');
+      const imgSrc = imgEl && imgEl.src && !imgEl.src.endsWith(location.origin + '/') ? imgEl.src : null;
+      const vidSrc = vidEl && vidEl.src && !vidEl.src.endsWith(location.origin + '/') ? vidEl.src : null;
+      if (imgSrc) md += `\n![Generated image](${imgSrc})\n`;
+      if (vidSrc) md += `\n[Generated video](${vidSrc})\n`;
+      return { md, userName, date };
+    }
+
+    function triggerDownload(content, filename, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+    }
+
+    // ─── 1. Share via Web Share API ───────────────────────────────────
+    document.getElementById('exportShareBtn').addEventListener('click', async () => {
+      exportMenuEl.classList.add('hidden');
+      const { txt, userName, date, buddyName } = buildExportText();
+      const shareTitle = `${buddyName} — ${userName} — ${date}`;
+
+      // Feature-detect: try Files share first (Android Chrome PWA gets share sheet)
+      // then fall back to text-only share, then fall back to plain download.
+      if (navigator.share) {
+        try {
+          // Try sharing as a .txt file (works on Android Chrome ≥ 89, iOS ≥ 15.1)
+          if (navigator.canShare) {
+            const file = new File([txt], `thinkinbuddy-${userName.toLowerCase()}-${date}.txt`, { type: 'text/plain' });
+            if (navigator.canShare({ files: [file] })) {
+              await navigator.share({ title: shareTitle, files: [file] });
+              return;
+            }
+          }
+          // Text-only share (older Android, desktop Chrome)
+          await navigator.share({ title: shareTitle, text: txt });
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return; // user dismissed sheet — no fallback needed
+          // Other errors → fall through to download
+        }
+      }
+      // Fallback: download .txt
+      triggerDownload(txt, `thinkinbuddy-${userName.toLowerCase()}-${date}.txt`, 'text/plain');
+      alert('Share not supported in this browser — downloaded as .txt instead.');
+    });
+
+    // ─── 2. PDF via print dialog ──────────────────────────────────────
+    document.getElementById('exportPdfBtn').addEventListener('click', () => {
+      exportMenuEl.classList.add('hidden');
+      const { userName, date, buddyName } = buildExportText();
+      const printEl = document.getElementById('printOutput');
+
+      // Build readable HTML for the print layer
+      let html = `<div class="print-header">${buddyName} session — ${userName} — ${date}</div>`;
+      for (const msg of currentHistory) {
+        const role  = msg.role === 'user' ? userName : buddyName;
+        const clean = (msg.content || '').replace(/\[ACTION:[^\]]+\]/g, '').trim();
+        html += `<div class="print-msg"><div class="print-role">${role}</div><div class="print-text">${clean.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div></div>`;
+      }
+      // Include any displayed media URLs
+      const imgEl = document.getElementById('mediaImg');
+      const vidEl = document.getElementById('mediaVideo');
+      const imgSrc = imgEl && imgEl.src && !imgEl.src.endsWith(location.origin + '/') ? imgEl.src : null;
+      const vidSrc = vidEl && vidEl.src && !vidEl.src.endsWith(location.origin + '/') ? vidEl.src : null;
+      if (imgSrc) html += `<div class="print-msg"><div class="print-role">Generated image</div><div class="print-text"><a href="${imgSrc}">${imgSrc}</a></div></div>`;
+      if (vidSrc) html += `<div class="print-msg"><div class="print-role">Generated video</div><div class="print-text"><a href="${vidSrc}">${vidSrc}</a></div></div>`;
+
+      printEl.innerHTML = html;
+      window.print();
+      // Clean up after print dialog closes
+      setTimeout(() => { printEl.innerHTML = ''; }, 2000);
+    });
+
+    // ─── 3. Markdown download ─────────────────────────────────────────
+    document.getElementById('exportMdBtn').addEventListener('click', () => {
+      exportMenuEl.classList.add('hidden');
+      const { md, userName, date } = buildMarkdown();
+      triggerDownload(md, `thinkinbuddy-${userName.toLowerCase()}-${date}.md`, 'text/markdown');
+    });
+
+    // ─── 4. Plain text download ───────────────────────────────────────
+    document.getElementById('exportTxtBtn').addEventListener('click', () => {
+      exportMenuEl.classList.add('hidden');
+      const { txt, userName, date } = buildExportText();
+      triggerDownload(txt, `thinkinbuddy-${userName.toLowerCase()}-${date}.txt`, 'text/plain');
+    });
+
+    // ─── 5. Copy to clipboard ─────────────────────────────────────────
+    document.getElementById('exportCopyBtn').addEventListener('click', async () => {
+      exportMenuEl.classList.add('hidden');
+      const { txt } = buildExportText();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          await navigator.clipboard.writeText(txt);
+          // Brief visual confirmation: change button label momentarily
+          const btn = document.getElementById('exportBtn');
+          const orig = btn.textContent;
+          btn.textContent = '✓ Copied!';
+          setTimeout(() => { btn.textContent = orig; }, 1800);
+          return;
+        } catch (err) {
+          // Permission denied or other error — fall through
+        }
+      }
+      // Fallback: execCommand (deprecated but still works on iOS Safari, older Android)
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = txt;
+        ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        const btn = document.getElementById('exportBtn');
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => { btn.textContent = orig; }, 1800);
+      } catch (e) {
+        alert('Could not copy — try the Markdown or Text download instead.');
+      }
     });
 
     // ─── Reset (sign out / new user) ──────────────────────────────────
