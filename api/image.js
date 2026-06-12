@@ -9,6 +9,7 @@
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../lib/security.js';
 import { isAllowed, SAFE_REFUSAL } from '../lib/moderation.js';
+import { saveMediaMemory } from '../lib/mediaMemory.js';
 
 const MODEL = 'gpt-image-2';
 const blobPrefix = (userId) => `thinkinbuddy/images/${userId}/`;
@@ -106,6 +107,10 @@ export default async function handler(req, res) {
       } catch (err) {
         console.error('[image] sidecar write failed (non-fatal):', err?.message || err);
       }
+      // Persist to Neon memory so this image is recallable by semantic search.
+      saveMediaMemory({ userId, type: 'image', blobUrl: publicUrl, prompt, createdAt: ts }).catch(
+        (e) => console.error('[image] saveMediaMemory failed (non-fatal):', e?.message || e)
+      );
     } else {
       return res.status(502).json({ result: 'OpenAI returned no image data' });
     }

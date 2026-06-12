@@ -271,6 +271,166 @@
     .elevenlabs-mode elevenlabs-convai { display: block; z-index: 2; }
     elevenlabs-convai { display: none; }
     .elevenlabs-mode .orb, .elevenlabs-mode .status, .elevenlabs-mode .transcript { display: none; }
+
+    /* ─── Media gallery panel ───────────────────────────────────────── */
+    .gallery-panel {
+      position: fixed; inset: 0;
+      background: rgba(5,5,8,0.97);
+      backdrop-filter: blur(8px);
+      z-index: 60;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .gallery-panel.hidden { display: none; }
+    .gallery-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 20px 12px;
+      border-bottom: 1px solid rgba(0,212,255,0.15);
+      flex-shrink: 0;
+    }
+    .gallery-header h2 {
+      font-size: 0.85rem; letter-spacing: 0.3em; color: #00d4ff;
+      text-transform: uppercase;
+    }
+    .gallery-header-right { display: flex; align-items: center; gap: 10px; }
+    .gallery-search {
+      background: rgba(0,212,255,0.05);
+      border: 1px solid rgba(0,212,255,0.25);
+      color: #e0f0ff;
+      padding: 6px 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.72rem;
+      border-radius: 3px;
+      outline: none;
+      width: 180px;
+      letter-spacing: 0.04em;
+    }
+    .gallery-search:focus { border-color: rgba(0,212,255,0.6); }
+    .gallery-search::placeholder { color: #4a5568; }
+    .gallery-filter {
+      background: rgba(0,212,255,0.05);
+      border: 1px solid rgba(0,212,255,0.25);
+      color: #a0aec0;
+      padding: 6px 10px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+    .gallery-close {
+      background: transparent;
+      border: 1px solid rgba(0,212,255,0.3);
+      color: #00d4ff;
+      padding: 6px 14px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .gallery-close:hover { background: rgba(0,212,255,0.1); }
+    .gallery-grid {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+      align-content: start;
+    }
+    .gallery-empty {
+      grid-column: 1/-1;
+      color: #4a5568;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-align: center;
+      margin-top: 40px;
+    }
+    .gallery-item {
+      position: relative;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid rgba(0,212,255,0.15);
+      cursor: pointer;
+      background: rgba(0,212,255,0.03);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      aspect-ratio: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .gallery-item:hover {
+      border-color: rgba(0,212,255,0.6);
+      box-shadow: 0 0 16px rgba(0,212,255,0.2);
+    }
+    .gallery-item img,
+    .gallery-item video {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+      pointer-events: none;
+    }
+    .gallery-item-badge {
+      position: absolute; top: 4px; left: 4px;
+      background: rgba(0,0,0,0.75);
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 0.55rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #00d4ff;
+    }
+    .gallery-item-caption {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: linear-gradient(transparent, rgba(0,0,0,0.85));
+      padding: 18px 6px 5px;
+      font-size: 0.6rem;
+      color: #a0aec0;
+      line-height: 1.3;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    /* Lightbox overlay for full-size view */
+    .gallery-lightbox {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.92);
+      z-index: 70;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .gallery-lightbox.hidden { display: none; }
+    .gallery-lightbox img,
+    .gallery-lightbox video {
+      max-width: min(90vw, 900px);
+      max-height: 75vh;
+      border-radius: 8px;
+      border: 1px solid rgba(0,212,255,0.3);
+      object-fit: contain;
+    }
+    .gallery-lightbox-caption {
+      margin-top: 12px;
+      font-size: 0.75rem;
+      color: #a0aec0;
+      text-align: center;
+      max-width: 600px;
+      line-height: 1.5;
+    }
+    .gallery-lightbox-close {
+      position: absolute; top: 18px; right: 20px;
+      background: rgba(0,0,0,0.7);
+      border: 1px solid rgba(0,212,255,0.4);
+      color: #00d4ff;
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
   </style>
 </head>
 <body>
@@ -320,7 +480,35 @@
         <button id="exportCopyBtn">⎘ Copy to clipboard</button>
       </div>
     </div>
+    <button id="galleryBtn" title="View all generated images and videos">◫ Gallery</button>
     <button id="resetBtn" title="Sign out / new user">⟲ Reset</button>
+  </div>
+
+  <!-- ─── Media Gallery Panel ────────────────────────────────────────── -->
+  <div class="gallery-panel hidden" id="galleryPanel">
+    <div class="gallery-header">
+      <h2>Media Gallery</h2>
+      <div class="gallery-header-right">
+        <input class="gallery-search" id="gallerySearch" type="search" placeholder="Search by prompt…" autocomplete="off" />
+        <select class="gallery-filter" id="galleryFilter">
+          <option value="all">All</option>
+          <option value="image">Images</option>
+          <option value="video">Videos</option>
+        </select>
+        <button class="gallery-close" id="galleryClose">✕ Close</button>
+      </div>
+    </div>
+    <div class="gallery-grid" id="galleryGrid">
+      <div class="gallery-empty" id="galleryEmpty">No media yet — ask Mark to generate an image or video.</div>
+    </div>
+  </div>
+
+  <!-- ─── Lightbox ─────────────────────────────────────────────────── -->
+  <div class="gallery-lightbox hidden" id="galleryLightbox">
+    <button class="gallery-lightbox-close" id="galleryLightboxClose">✕</button>
+    <img id="galleryLightboxImg" src="" alt="" style="display:none;" />
+    <video id="galleryLightboxVideo" playsinline controls style="display:none;"></video>
+    <div class="gallery-lightbox-caption" id="galleryLightboxCaption"></div>
   </div>
 
   <!-- Hidden print container — only visible during window.print() -->
@@ -553,8 +741,14 @@
     const HISTORY_KEY = 'thinkbuddy_history_v1';
 
     function loadUser() {
-      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); }
-      catch (e) { return null; }
+      try {
+        const u = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+        // CANONICAL ID: every device shares ONE memory under user_id 'troy'.
+        // Collapse any legacy per-browser random id (u_...) onto 'troy' so this
+        // user's facts are never split across browsers again.
+        if (u && u.userId !== 'troy') { u.userId = 'troy'; saveUser(u); }
+        return u;
+      } catch (e) { return null; }
     }
     function saveUser(u) { localStorage.setItem(STORAGE_KEY, JSON.stringify(u)); }
     function loadHistory() {
@@ -567,7 +761,10 @@
       localStorage.removeItem(HISTORY_KEY);
     }
     function genUserId() {
-      return 'u_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+      // CANONICAL ID: this app is single-user (Troy). Return the fixed id 'troy'
+      // so every device/browser shares ONE memory instead of generating a random
+      // per-browser id that strands facts under separate user_ids.
+      return 'troy';
     }
 
     // ─── Onboarding flow ──────────────────────────────────────────────
@@ -1229,6 +1426,194 @@
       });
 
       synth.onvoiceschanged = () => synth.getVoices();
+    }
+  </script>
+
+  <script>
+    // ─── Media Gallery ───────────────────────────────────────────────
+    // Fetches all past media from /api/media-gallery, renders a grid,
+    // supports semantic search (cosine recall via pgvector), and opens
+    // a lightbox on click.  Opened via the ◫ Gallery button.
+
+    const galleryPanelEl     = document.getElementById('galleryPanel');
+    const galleryGridEl      = document.getElementById('galleryGrid');
+    const galleryEmptyEl     = document.getElementById('galleryEmpty');
+    const gallerySearchEl    = document.getElementById('gallerySearch');
+    const galleryFilterEl    = document.getElementById('galleryFilter');
+    const galleryBtnEl       = document.getElementById('galleryBtn');
+    const galleryCloseEl     = document.getElementById('galleryClose');
+    const galleryLightboxEl  = document.getElementById('galleryLightbox');
+    const galleryLbImg       = document.getElementById('galleryLightboxImg');
+    const galleryLbVideo     = document.getElementById('galleryLightboxVideo');
+    const galleryLbCaption   = document.getElementById('galleryLightboxCaption');
+    const galleryLbCloseEl   = document.getElementById('galleryLightboxClose');
+
+    let gallerySearchTimer = null;
+
+    // ── Open / close gallery panel ─────────────────────────────────
+    function openGallery() {
+      galleryPanelEl.classList.remove('hidden');
+      loadGallery();
+    }
+    function closeGallery() {
+      galleryPanelEl.classList.add('hidden');
+    }
+
+    galleryBtnEl.addEventListener('click', openGallery);
+    galleryCloseEl.addEventListener('click', closeGallery);
+
+    // ── Fetch + render ─────────────────────────────────────────────
+    async function loadGallery(query) {
+      const userId = currentUser?.userId;
+      if (!userId) {
+        galleryEmptyEl.style.display = 'block';
+        galleryEmptyEl.textContent = 'Sign in first to see your gallery.';
+        return;
+      }
+
+      const type    = galleryFilterEl.value || 'all';
+      const limit   = 60;
+      const params  = new URLSearchParams({ userId, limit, type });
+      if (query) params.set('query', query);
+
+      let items = [];
+      try {
+        const res = await fetch(`/api/media-gallery?${params}`);
+        const data = await res.json();
+        items = data?.items || [];
+      } catch (e) {
+        console.warn('[gallery] fetch failed:', e);
+      }
+
+      renderGallery(items, query);
+    }
+
+    function renderGallery(items, query) {
+      // Remove previous item nodes (keep the empty placeholder)
+      Array.from(galleryGridEl.querySelectorAll('.gallery-item')).forEach(n => n.remove());
+
+      if (!items.length) {
+        galleryEmptyEl.style.display = 'block';
+        galleryEmptyEl.textContent = query
+          ? `No media found matching "${query}".`
+          : 'No media yet — ask Mark to generate an image or video.';
+        return;
+      }
+
+      galleryEmptyEl.style.display = 'none';
+
+      for (const item of items) {
+        const el    = document.createElement('div');
+        el.className = 'gallery-item';
+        el.dataset.url     = item.blobUrl || '';
+        el.dataset.type    = item.type || 'image';
+        el.dataset.caption = item.caption || '';
+
+        // Badge
+        const badge = document.createElement('div');
+        badge.className = 'gallery-item-badge';
+        badge.textContent = item.type === 'video' ? '▶ video' : '⬜ image';
+        el.appendChild(badge);
+
+        // Thumbnail
+        if (item.type === 'video') {
+          const vid = document.createElement('video');
+          vid.src = item.blobUrl || '';
+          vid.muted = true;
+          vid.preload = 'metadata';
+          // Pause at first frame as poster substitute
+          vid.addEventListener('loadedmetadata', () => { vid.currentTime = 0.1; });
+          el.appendChild(vid);
+        } else {
+          const img = document.createElement('img');
+          img.src = item.blobUrl || '';
+          img.alt = item.caption || 'Generated image';
+          img.loading = 'lazy';
+          el.appendChild(img);
+        }
+
+        // Caption
+        const cap = document.createElement('div');
+        cap.className = 'gallery-item-caption';
+        cap.textContent = item.caption || '';
+        el.appendChild(cap);
+
+        el.addEventListener('click', () => openLightbox(item));
+
+        galleryGridEl.appendChild(el);
+      }
+    }
+
+    // ── Search (debounced, 500ms) ──────────────────────────────────
+    gallerySearchEl.addEventListener('input', () => {
+      clearTimeout(gallerySearchTimer);
+      gallerySearchTimer = setTimeout(() => {
+        const q = gallerySearchEl.value.trim();
+        loadGallery(q || undefined);
+      }, 500);
+    });
+
+    galleryFilterEl.addEventListener('change', () => {
+      const q = gallerySearchEl.value.trim();
+      loadGallery(q || undefined);
+    });
+
+    // ── Lightbox ──────────────────────────────────────────────────
+    function openLightbox(item) {
+      galleryLbImg.style.display   = 'none';
+      galleryLbVideo.style.display = 'none';
+      galleryLbImg.src             = '';
+      try { galleryLbVideo.pause(); } catch {}
+      galleryLbVideo.src           = '';
+
+      if (item.type === 'video') {
+        galleryLbVideo.src = item.blobUrl || '';
+        galleryLbVideo.style.display = 'block';
+        try { galleryLbVideo.play().catch(() => {}); } catch {}
+      } else {
+        galleryLbImg.src = item.blobUrl || '';
+        galleryLbImg.alt = item.caption || '';
+        galleryLbImg.style.display = 'block';
+      }
+
+      galleryLbCaption.textContent = item.caption || '';
+      galleryLightboxEl.classList.remove('hidden');
+    }
+
+    function closeLightbox() {
+      galleryLightboxEl.classList.add('hidden');
+      try { galleryLbVideo.pause(); } catch {}
+      galleryLbVideo.src = '';
+      galleryLbImg.src   = '';
+    }
+
+    galleryLbCloseEl.addEventListener('click', closeLightbox);
+    galleryLightboxEl.addEventListener('click', (e) => {
+      if (e.target === galleryLightboxEl) closeLightbox();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (!galleryLightboxEl.classList.contains('hidden')) { closeLightbox(); return; }
+        if (!galleryPanelEl.classList.contains('hidden'))    { closeGallery(); }
+      }
+    });
+
+    // Re-load gallery when a new image or video is shown to the user, so it
+    // appears in the gallery immediately (only if the panel is already open).
+    const _origShowMedia = typeof showMedia === 'function' ? showMedia : null;
+    const _origShowVideo = typeof showVideo === 'function' ? showVideo : null;
+    // Intercept via event — simpler than wrapping and avoids hoisting issues.
+    // The pollers call showMedia/showVideo directly so we hook at render time.
+    function refreshGalleryIfOpen() {
+      if (!galleryPanelEl.classList.contains('hidden')) {
+        const q = gallerySearchEl.value.trim();
+        loadGallery(q || undefined);
+      }
+    }
+    // Observe mediaArea visibility changes as a proxy for new media arriving
+    if (window.MutationObserver && document.getElementById('mediaArea')) {
+      const mo = new MutationObserver(() => refreshGalleryIfOpen());
+      mo.observe(document.getElementById('mediaArea'), { attributes: true, attributeFilter: ['style'] });
     }
   </script>
 </body>

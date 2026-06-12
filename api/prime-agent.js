@@ -51,9 +51,23 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: 'userId required' });
   }
 
+  // Optional retrieval inputs (all backward-compatible — absent = old behavior):
+  //   query           — if the client knows "what the user is talking about",
+  //                      it triggers VECTOR-FIRST recall (memory.js retrieveMemories).
+  //                      Absent → non-circular boot rank (importance/confidence/recency).
+  //   projectSlug/taskId — widen scope to project:<slug> / task:<id> (spec :141-143).
+  // The HTTP contract (response shape, required userId) is unchanged.
+  const query = typeof req.body?.query === 'string' ? req.body.query : undefined;
+  const projectSlug = typeof req.body?.projectSlug === 'string' ? req.body.projectSlug : null;
+  const taskId = typeof req.body?.taskId === 'string' ? req.body.taskId : null;
+
+  const scopes = ['semantic'];
+  if (projectSlug) scopes.push(`project:${projectSlug}`);
+  if (taskId) scopes.push(`task:${taskId}`);
+
   let facts = [];
   try {
-    facts = await retrieveMemories(userId, 30);
+    facts = await retrieveMemories(userId, { limit: 30, query, scopes });
   } catch (err) {
     console.error('[prime-agent] retrieveMemories failed:', err?.message || err);
     facts = [];

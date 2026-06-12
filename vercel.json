@@ -8,5 +8,11 @@
     "api/extract-memories.js": { "maxDuration": 30 },
     "api/browse.js": { "maxDuration": 30 },
     "api/search.js": { "maxDuration": 30 }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron-expire-memories",
+      "schedule": "0 7 * * *"
+    }
+  ]
 }

@@ -10,6 +10,7 @@
 // most one download), so it always fits inside the function timeout.
 
 import { list, put, del } from '@vercel/blob';
+import { saveMediaMemory } from '../lib/mediaMemory.js';
 
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
 
@@ -70,7 +71,7 @@ async function finalizePending(blobs, token, apiKey) {
       const buf = Buffer.from(await contentRes.arrayBuffer());
       const ts = Date.now();
       const userId = meta.userId || 'anonymous';
-      await put(`${blobPrefix(userId)}${ts}.mp4`, buf, {
+      const finalBlob = await put(`${blobPrefix(userId)}${ts}.mp4`, buf, {
         access: 'public',
         contentType: 'video/mp4',
         addRandomSuffix: false,
@@ -81,6 +82,14 @@ async function finalizePending(blobs, token, apiKey) {
         JSON.stringify({ prompt: meta.prompt || '', provider: meta.provider || 'sora' }),
         { access: 'public', contentType: 'application/json', addRandomSuffix: false, token },
       );
+      // Persist to Neon memory so this Sora video is recallable by semantic search.
+      // Mirrors the Runway path in api/video.js:146 — without this, kick-and-poll
+      // (Sora) videos finish in Blob but are never saved to memory_items.
+      if (meta.prompt) {
+        saveMediaMemory({ userId, type: 'video', blobUrl: finalBlob.url, prompt: meta.prompt, createdAt: ts }).catch(
+          (e) => console.error('[latest-video] saveMediaMemory failed (non-fatal):', e?.message || e),
+        );
+      }
       await del(marker.url, { token }).catch(() => {});
     } catch (err) {
       console.error('[latest-video] finalize failed for', jobId, err?.message || err);

@@ -11,6 +11,7 @@
 
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../lib/security.js';
+import { saveMediaMemory } from '../lib/mediaMemory.js';
 
 const RUNWAY_BASE = 'https://api.dev.runwayml.com/v1';
 const RUNWAY_VERSION = '2024-11-06';
@@ -141,6 +142,10 @@ export default async function handler(req, res) {
     } catch (err) {
       console.error('[video] sidecar write failed (non-fatal):', err?.message || err);
     }
+    // Persist to Neon memory so this video is recallable by semantic search.
+    saveMediaMemory({ userId, type: 'video', blobUrl: blob.url, prompt, createdAt: ts }).catch(
+      (e) => console.error('[video] saveMediaMemory failed (non-fatal):', e?.message || e)
+    );
 
     return res.status(200).json({
       result: `Video generated (${duration}s).`,
