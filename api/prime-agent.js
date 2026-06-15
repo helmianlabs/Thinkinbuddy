@@ -40,9 +40,10 @@ export default async function handler(req, res) {
   const buddyName = req.body?.buddyName || 'ThinkinBuddy';
   const userName = req.body?.userName || null;
   const userId = req.body?.userId;
-  // Optional conversational mode. 'spanish_tutor' makes the buddy a forced-practice
-  // Spanish tutor for this session. Client passes it via the request body.
-  const mode = req.body?.mode === 'spanish_tutor' ? 'spanish_tutor' : 'default';
+  // Optional conversational mode. Validated against VALID_MODES; unknown values
+  // fall back to 'default'. Client passes the active mode via the request body.
+  const VALID_MODES = ['default', 'spanish_tutor', 'feynman_module1'];
+  const mode = VALID_MODES.includes(req.body?.mode) ? req.body.mode : 'default';
 
   // Isolation: a missing userId can no longer silently collapse onto 'troy'
   // and read someone else's prefix. The client always sends the real

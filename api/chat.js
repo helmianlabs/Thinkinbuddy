@@ -22,7 +22,8 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { messages, userContext, mode: rawMode } = req.body || {};
-  const mode = rawMode === 'spanish_tutor' ? 'spanish_tutor' : 'default';
+  const VALID_MODES = ['default', 'spanish_tutor', 'feynman_module1'];
+  const mode = VALID_MODES.includes(rawMode) ? rawMode : 'default';
   if (!messages?.length) return res.status(400).json({ error: 'messages required' });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;

@@ -819,12 +819,16 @@
       // Update title to show the buddy's name
       document.querySelector('.title').textContent = buddyName.toUpperCase();
       const mode = window.thinkinBuddyMode || 'default';
-      const modeLabel = mode === 'spanish_tutor' ? ' · 🇪🇸 ESPAÑOL TUTOR' : '';
+      const modeLabel =
+        mode === 'spanish_tutor' ? ' · 🇪🇸 ESPAÑOL TUTOR' :
+        mode === 'feynman_module1' ? ' · 🧠 FEYNMAN MODULE 1' : '';
       subtitleEl.textContent = `YOUR THINKING PARTNER — ${currentUser.name.toUpperCase()}${modeLabel}`;
       const tutorToggleHtml =
         mode === 'spanish_tutor'
           ? `<a id="tutorOffLink">Switch back to regular buddy</a> · `
-          : `<a id="tutorOnLink">Try Spanish tutor mode</a> · `;
+        : mode === 'feynman_module1'
+          ? `<a id="feynmanOffLink">Switch back to regular buddy</a> · `
+          : `<a id="tutorOnLink">Try Spanish tutor mode</a> · <a id="feynmanOnLink">Try Feynman Module 1</a> · `;
       const consentText = currentUser.consentResearch
         ? `Conversations may be saved for research as previously discussed. <a id="optoutLink">Opt out</a>`
         : `<a id="optinLink">Enable research mode</a>`;
@@ -836,6 +840,16 @@
         location.reload();
       });
       if (tutorOff) tutorOff.addEventListener('click', () => {
+        localStorage.removeItem('thinkinbuddy_mode_v1');
+        location.reload();
+      });
+      const feynmanOn = document.getElementById('feynmanOnLink');
+      const feynmanOff = document.getElementById('feynmanOffLink');
+      if (feynmanOn) feynmanOn.addEventListener('click', () => {
+        localStorage.setItem('thinkinbuddy_mode_v1', 'feynman_module1');
+        location.reload();
+      });
+      if (feynmanOff) feynmanOff.addEventListener('click', () => {
         localStorage.removeItem('thinkinbuddy_mode_v1');
         location.reload();
       });
@@ -1157,6 +1171,8 @@
       let activeMode = 'default';
       if (urlMode === 'spanish_tutor' || urlTutor === '1') activeMode = 'spanish_tutor';
       else if (storedMode === 'spanish_tutor') activeMode = 'spanish_tutor';
+      else if (urlMode === 'feynman_module1' || urlParams.get('feynman') === '1') activeMode = 'feynman_module1';
+      else if (storedMode === 'feynman_module1') activeMode = 'feynman_module1';
       window.thinkinBuddyMode = activeMode;
       console.log('[ThinkinBuddy] active mode:', activeMode);
 
