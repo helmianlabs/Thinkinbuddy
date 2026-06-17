@@ -139,11 +139,15 @@ export default async function handler(req, res) {
     try {
       const { blobs } = await list({ prefix: `alarms/${userId}/${id}` });
       if (blobs.length) {
-        // Overwrite with pending=false so we don't reschedule on next poll
+        // Overwrite with pending=false so we don't reschedule on next poll.
+        // @vercel/blob v2.x rejects put() to an existing pathname unless
+        // allowOverwrite is set — without it the DELETE/mark-delivered call
+        // throws "blob already exists" and the alarm would re-fire forever.
         const original = await fetch(blobs[0].url).then(r => r.json()).catch(() => ({}));
         await put(blobs[0].pathname, JSON.stringify({ ...original, pending: false }), {
           access: 'public',
           contentType: 'application/json',
+          allowOverwrite: true,
         });
       }
     } catch (e) {
