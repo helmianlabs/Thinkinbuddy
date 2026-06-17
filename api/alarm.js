@@ -15,16 +15,17 @@
 // Java layer (TimedNotificationPublisher / AlarmManager).  A server-side webhook
 // has no access to that bridge.
 
-import { applyBrowserCors } from '../lib/security.js';
-
 export default async function handler(req, res) {
   // Allow the ElevenLabs agent (different origin) to POST here, plus the
-  // in-page polling GET.  Use the same CORS helper but allow * for this
-  // route since the agent doesn't send a browser Origin.
+  // in-page polling GET/DELETE from the Capacitor native WebView
+  // (https://localhost / capacitor://localhost) and the web app. The agent
+  // doesn't send a browser Origin, and the native app's Origin varies by
+  // platform, so wildcard is the correct, low-risk choice for this endpoint.
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  // Preflight: return 204 No Content with the CORS headers already set above.
+  if (req.method === 'OPTIONS') return res.status(204).end();
 
   const { put, list, del } = await import('@vercel/blob');
 
