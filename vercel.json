@@ -7,7 +7,9 @@
     "api/video.js": { "maxDuration": 300 },
     "api/extract-memories.js": { "maxDuration": 30 },
     "api/browse.js": { "maxDuration": 30 },
-    "api/search.js": { "maxDuration": 30 }
+    "api/search.js": { "maxDuration": 30 },
+    "api/diary.js": { "maxDuration": 60 },
+    "api/mcp.js": { "maxDuration": 30 }
   },
   "crons": [
     {
