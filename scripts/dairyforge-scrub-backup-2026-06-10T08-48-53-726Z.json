@@ -1,0 +1,70 @@
+{
+  "plants": [
+    {
+      "id": "chobani-twin-falls",
+      "display_name": "Chobani — Twin Falls"
+    },
+    {
+      "id": "glanbia-twin-falls",
+      "display_name": "Glanbia Foods — Twin Falls"
+    },
+    {
+      "id": "idaho-milk-products-jerome",
+      "display_name": "Idaho Milk Products — Jerome"
+    },
+    {
+      "id": "magic-valley-cheese-buhl",
+      "display_name": "Magic Valley Cheese — Buhl"
+    }
+  ],
+  "geofences": [
+    {
+      "slug": "chobani",
+      "from": "Chobani",
+      "to": "Summit Valley Creamery"
+    },
+    {
+      "slug": "darigold",
+      "from": "Darigold",
+      "to": "Highline Dairy Co."
+    },
+    {
+      "slug": "glanbia",
+      "from": "Glanbia",
+      "to": "Cascade Dairy Foods"
+    },
+    {
+      "slug": "brewster",
+      "from": "Brewster Cheese",
+      "to": "Ridgeline Cheese"
+    }
+  ],
+  "audit_actor": 5,
+  "audit_meta_email": 3,
+  "yards": [
+    {
+      "id": 5,
+      "city": "Heyburn"
+    },
+    {
+      "id": 6,
+      "city": "Mountain Home"
+    },
+    {
+      "id": 7,
+      "city": "Jerome"
+    },
+    {
+      "id": 8,
+      "city": "Meridian"
+    },
+    {
+      "id": 9,
+      "city": "Smithfield"
+    },
+    {
+      "id": 10,
+      "city": "Salt Lake City"
+    }
+  ]
+}
