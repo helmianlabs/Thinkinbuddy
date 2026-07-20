@@ -618,6 +618,34 @@
     let idleTimer = null;
     const IDLE_MS = 45000; // 45s of silence = call effectively ended
 
+    // ── CONTINUOUS TRANSCRIPT LOG (live, turn-by-turn, durable) ────────────
+    // liveSessionId is generated the INSTANT a call starts -- never blocked
+    // on capturing ElevenLabs' own conversation_id (see MEM-HB comments
+    // above on why that capture is unreliable). Each turn is posted to
+    // /api/conversation-turn as it happens; api/conversation-webhook.js
+    // reconciles the authoritative full transcript once the call ends,
+    // server-side, independent of anything in this browser tab.
+    let liveSessionId = null;
+    let liveTurnIndex = 0;
+
+    function fireConversationTurn(role, content, raw) {
+      if (!liveSessionId || !currentUser?.userId) return;
+      try {
+        fetch('/api/conversation-turn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: liveSessionId,
+            userId: currentUser.userId,
+            conversationId: lastConversationId,
+            turnIndex: liveTurnIndex++,
+            role, content, raw,
+          }),
+          keepalive: true,
+        });
+      } catch (e) { console.warn('[CONV-LOG] turn save failed', e); }
+    }
+
     // Per-session system prompt for the CURRENT user, built server-side by
     // /api/prime-agent from their own memories. Applied as a per-session
     // override on the widget's elevenlabs-convai:call event so user A's facts
@@ -658,6 +686,9 @@
       startVideoPoller();
       extractFired = false;
       lastConversationId = null;
+      liveSessionId = crypto.randomUUID();
+      liveTurnIndex = 0;
+      console.log('[CONV-LOG] new live session:', liveSessionId);
       const cfg = e.detail?.config;
       if (!cfg) { console.warn('[MEM-HB] BAIL — no e.detail.config, cannot inject onConnect'); return; }
 
@@ -708,6 +739,11 @@
         }
         if (!lastConversationId) console.log('[MEM-HB] onMessage but NO conversationId — msg shape:', Object.keys(msg || {}));
         console.log('[MEM-HB] onMessage fired — resetting idle timer');
+        // Live turn capture: JS SDK onMessage payload is {message, source}
+        // (source: 'user'|'ai') per ElevenLabs' documented client SDK shape.
+        const turnRole = msg?.source === 'user' ? 'user' : 'agent';
+        const turnContent = typeof msg?.message === 'string' ? msg.message : (typeof msg?.text === 'string' ? msg.text : null);
+        if (turnContent) fireConversationTurn(turnRole, turnContent, msg);
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
           console.log('[MEM-HB] idle timer expired — firing extract-memories');
