@@ -1129,11 +1129,28 @@
     exportMenuEl.addEventListener('click', (e) => e.stopPropagation());
 
     // ─── Shared helpers ───────────────────────────────────────────────
+    // Say on the file's face what it is. This export is built from what THIS
+    // browser captured (currentHistory) — not from the server's transcript.
+    // A reload mid-conversation, a tab closed before a turn arrived, or a turn
+    // the widget never surfaced will be missing here and present server-side.
+    // The complete record lives in Neon (conversation_turns, written per turn
+    // by /api/conversation-turn), but the browser cannot read it back: the
+    // route that serves it is server-to-server only, and the userId this app
+    // uses is a constant, not a credential — so opening it to the browser
+    // would make every transcript world-readable. Until that is fixed with a
+    // real per-user token, this file is the device's copy, labelled as such.
+    function exportProvenance() {
+      const n = currentHistory.length;
+      return `Captured in this browser — ${n} turn${n === 1 ? '' : 's'} recorded on this device. `
+           + `If the page was reloaded or closed mid-conversation, earlier turns may be missing from this file.`;
+    }
+
     function buildExportText() {
       const date   = new Date().toISOString().slice(0, 10);
       const userName = currentUser?.name || 'Session';
       const buddyName = currentUser?.buddyName || 'ThinkinBuddy';
-      let txt = `${buddyName.toUpperCase()} SESSION — ${userName} — ${date}\n\n`;
+      let txt = `${buddyName.toUpperCase()} SESSION — ${userName} — ${date}\n`;
+      txt += `${exportProvenance()}\n\n`;
       for (const msg of currentHistory) {
         const role = msg.role === 'user' ? userName : buddyName;
         const clean = (msg.content || '').replace(/\[ACTION:[^\]]+\]/g, '').trim();
@@ -1153,6 +1170,7 @@
       const { txt, userName, date, buddyName } = buildExportText();
       // Re-build as proper markdown
       let md = `# ${buddyName} session — ${userName} — ${date}\n\n`;
+      md += `*${exportProvenance()}*\n\n`;
       for (const msg of currentHistory) {
         const role = msg.role === 'user' ? userName : buddyName;
         const clean = (msg.content || '').replace(/\[ACTION:[^\]]+\]/g, '').trim();
