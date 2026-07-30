@@ -211,6 +211,95 @@
     .settings-panel button.secondary { color: #6b7280; border-color: rgba(107,114,128,0.4); background: transparent; }
     .settings-panel .test-line { font-size: 0.7rem; color: #6b7280; margin-bottom: 12px; }
 
+    /* ─── Settings pill (bottom-left, deliberately clear of the ──────
+       ElevenLabs widget which mounts bottom-right, and clear of the
+       .actions stack top-right). Small and quiet until hovered.     */
+    .settings-pill {
+      position: fixed; bottom: 18px; left: 18px;
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(5,5,8,0.85);
+      border: 1px solid rgba(0,212,255,0.22);
+      color: #6b7280;
+      padding: 7px 13px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.62rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 999px;
+      z-index: 6;
+      opacity: 0.55;
+      transition: opacity 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+    .settings-pill:hover { opacity: 1; color: #00d4ff; border-color: rgba(0,212,255,0.55); }
+    .settings-pill .pill-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #6b7280; transition: background 0.2s ease;
+    }
+    /* Lit only when at least one key is stored on this device. */
+    .settings-pill.configured .pill-dot { background: #00d4ff; box-shadow: 0 0 6px #00d4ff; }
+
+    /* ─── Config panel (tabs: Keys / Voice / Audio) ─────────────────── */
+    .settings-panel.config { min-width: 400px; max-width: min(94vw, 520px); }
+    .settings-panel .tabs {
+      display: flex; gap: 4px; margin-bottom: 18px;
+      border-bottom: 1px solid rgba(0,212,255,0.15);
+    }
+    .settings-panel .tabs button {
+      flex: 1; background: transparent; border: none;
+      border-bottom: 2px solid transparent;
+      color: #6b7280; padding: 8px 4px; border-radius: 0;
+      font-size: 0.62rem; letter-spacing: 0.12em;
+    }
+    .settings-panel .tabs button.active { color: #00d4ff; border-bottom-color: #00d4ff; }
+    .settings-panel .tab-body { max-height: 52vh; overflow-y: auto; margin-bottom: 16px; }
+    .settings-panel .tab-body::-webkit-scrollbar { width: 6px; }
+    .settings-panel .tab-body::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.25); border-radius: 3px; }
+    .settings-panel .tab-pane { display: none; }
+    .settings-panel .tab-pane.active { display: block; }
+
+    .settings-panel input[type="password"],
+    .settings-panel input[type="text"] {
+      width: 100%; padding: 9px 10px; box-sizing: border-box;
+      background: rgba(0,212,255,0.05); border: 1px solid rgba(0,212,255,0.3);
+      color: #e0f0ff; font-family: 'Courier New', monospace; font-size: 0.8rem;
+      border-radius: 3px; outline: none; margin-bottom: 4px;
+    }
+    .settings-panel input:focus { border-color: rgba(0,212,255,0.7); }
+    .key-field { margin-bottom: 14px; }
+    .key-field .key-head {
+      display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;
+    }
+    .key-field .key-used {
+      font-size: 0.55rem; color: #4b5563; letter-spacing: 0.06em;
+      text-transform: none; font-family: 'Courier New', monospace;
+    }
+    .key-field .key-row { display: flex; gap: 6px; align-items: stretch; }
+    .key-field .key-row input { margin-bottom: 0; }
+    .key-field .key-clear {
+      background: transparent; border: 1px solid rgba(107,114,128,0.35);
+      color: #6b7280; padding: 0 10px; font-size: 0.6rem; border-radius: 3px;
+      cursor: pointer; flex: 0 0 auto; letter-spacing: 0.08em;
+    }
+    .key-field .key-clear:hover { color: #ff6b6b; border-color: rgba(255,107,107,0.5); }
+    .key-field .key-stored { font-size: 0.58rem; color: #00d4ff; margin-top: 4px; letter-spacing: 0.05em; text-transform: none; }
+
+    .storage-note {
+      font-size: 0.6rem; color: #6b7280; line-height: 1.55;
+      background: rgba(0,212,255,0.04); border-left: 2px solid rgba(0,212,255,0.35);
+      padding: 9px 11px; margin-bottom: 16px; text-transform: none;
+      letter-spacing: 0.02em; font-family: 'Courier New', monospace;
+    }
+    .storage-note strong { color: #00d4ff; font-weight: normal; }
+
+    .toggle-row {
+      display: flex; align-items: flex-start; gap: 9px;
+      margin-bottom: 14px; cursor: pointer;
+    }
+    .toggle-row input[type="checkbox"] { margin: 2px 0 0 0; accent-color: #00d4ff; flex: 0 0 auto; }
+    .toggle-row .toggle-text { font-size: 0.65rem; color: #a0aec0; text-transform: none; letter-spacing: 0.03em; line-height: 1.5; }
+    .toggle-row .toggle-text small { display: block; color: #6b7280; font-size: 0.58rem; margin-top: 3px; }
+
     /* ─── Export dropdown menu ──────────────────────────────────────── */
     .export-menu {
       position: absolute;
@@ -248,7 +337,7 @@
     /* ─── Print / PDF stylesheet ─────────────────────────────────────── */
     @media print {
       body { background: #fff !important; color: #111 !important; display: block !important; height: auto !important; overflow: auto !important; font-family: Georgia, serif !important; padding: 20px !important; }
-      .corner, .actions, .settings-panel, .onboarding, .orb, .status, .transcript, .footer-note, elevenlabs-convai, #widget-mount, #mediaArea, body::before { display: none !important; }
+      .corner, .actions, .settings-panel, .settings-pill, .onboarding, .orb, .status, .transcript, .footer-note, elevenlabs-convai, #widget-mount, #mediaArea, body::before { display: none !important; }
       #printOutput { display: block !important; }
       .print-msg { margin-bottom: 14px; }
       .print-msg .print-role { font-weight: bold; font-size: 0.85rem; margin-bottom: 3px; }
@@ -468,7 +557,7 @@
 
   <!-- Top-right actions -->
   <div class="actions">
-    <button id="settingsBtn" title="Voice and other settings">⚙ Voice</button>
+    <!-- Settings moved to the #settingsPill (bottom-left), off the widget. -->
     <!-- Export button + dropdown wrapper -->
     <div id="exportWrapper">
       <button id="exportBtn" title="Export or share this conversation">↑ Export</button>
@@ -514,12 +603,72 @@
   <!-- Hidden print container — only visible during window.print() -->
   <div id="printOutput" style="display:none;"></div>
 
-  <!-- Settings panel (voice picker) -->
-  <div class="settings-panel hidden" id="settingsPanel">
-    <h2>Voice Settings</h2>
-    <label for="voiceSelect">Choose a voice</label>
-    <select id="voiceSelect"></select>
-    <div class="test-line">Tip: iPhones / iOS have better default voices than Android. Try the ones with "Siri" or "Daniel" or "Aaron" in the name if available.</div>
+  <!-- Settings pill — bottom-left, deliberately away from the voice widget -->
+  <button class="settings-pill" id="settingsPill" title="Keys, voice and background audio settings">
+    <span class="pill-dot"></span>Settings
+  </button>
+
+  <!-- Settings / config panel -->
+  <div class="settings-panel config hidden" id="settingsPanel">
+    <h2>Settings</h2>
+
+    <div class="tabs">
+      <button data-tab="keys"  class="active">Keys</button>
+      <button data-tab="voice">Voice</button>
+      <button data-tab="audio">Audio</button>
+    </div>
+
+    <div class="tab-body">
+      <!-- ── KEYS ─────────────────────────────────────────────────── -->
+      <div class="tab-pane active" data-pane="keys">
+        <div class="storage-note">
+          Keys are saved <strong>only in this browser's localStorage, on this
+          device</strong>. They are never written to a server, never logged, and
+          never included in analytics. Each key is sent only to this app's own
+          <strong>/api</strong> route for the provider it belongs to, over HTTPS,
+          as a request header. Clearing your browser data deletes them.
+          Leave a field blank to use the key configured on the server instead.
+        </div>
+        <div id="keyFields"></div>
+      </div>
+
+      <!-- ── VOICE ────────────────────────────────────────────────── -->
+      <div class="tab-pane" data-pane="voice">
+        <label for="elVoiceSelect">ElevenLabs voice (the talking buddy)</label>
+        <select id="elVoiceSelect"><option value="">Agent default</option></select>
+        <div class="test-line" id="elVoiceHint">
+          Applied per call as a session override. Requires "Voice" to be enabled
+          under Overrides in the ElevenLabs agent's Security tab — if it is off,
+          the agent keeps its default voice and this selection is ignored.
+        </div>
+
+        <label for="voiceSelect">Browser voice (offline / text-mode fallback)</label>
+        <select id="voiceSelect"></select>
+        <div class="test-line">Used by the free browser-speech mode, not by the ElevenLabs buddy. Tip: iPhones / iOS have better default voices than Android — try ones with "Siri", "Daniel" or "Aaron" in the name.</div>
+      </div>
+
+      <!-- ── AUDIO ────────────────────────────────────────────────── -->
+      <div class="tab-pane" data-pane="audio">
+        <div class="storage-note">
+          Keeps the conversation alive when the screen locks or you switch apps,
+          so you can pocket the phone and keep talking over Bluetooth.
+        </div>
+        <label class="toggle-row" for="bgAudioToggle">
+          <input type="checkbox" id="bgAudioToggle" checked />
+          <span class="toggle-text">Background audio (pocket mode)
+            <small>Registers a media session so the OS treats this as a music app and keeps it running when backgrounded. Shows a notification with pause/stop.</small>
+          </span>
+        </label>
+        <label class="toggle-row" for="keepAwakeToggle">
+          <input type="checkbox" id="keepAwakeToggle" />
+          <span class="toggle-text">Keep screen awake while talking
+            <small>Holds a screen wake lock during a call. Uses more battery. Off by default — pocket mode does not need it.</small>
+          </span>
+        </label>
+        <div class="test-line" id="bgAudioStatus">Status: not started.</div>
+      </div>
+    </div>
+
     <div class="row">
       <button class="secondary" id="settingsClose">Close</button>
       <button id="settingsTest">Test</button>
@@ -723,10 +872,26 @@
         console.log('[MEM-HB] set dynamicVariables.user_id for in-call tools');
       }
 
+      // ── Voice override ────────────────────────────────────────────────
+      // SDK ships overrides.tts.voiceId as part of the same
+      // conversation_config_override this handler already uses for the prompt
+      // (verified: @elevenlabs/client dist/utils/BaseConnection.d.ts:26-31
+      // `tts?: { voiceId?: string; speed?: number; ... }`).
+      // REQUIRES "Overrides → Voice" enabled in the agent's Security tab, the
+      // same way the prompt override requires "System prompt". If it is off,
+      // ElevenLabs ignores this and the agent keeps its configured voice.
+      const chosenVoiceId = localStorage.getItem('thinkbuddy_el_voice_v1');
+      if (chosenVoiceId) {
+        cfg.overrides = cfg.overrides || {};
+        cfg.overrides.tts = { ...(cfg.overrides.tts || {}), voiceId: chosenVoiceId };
+        console.log('[MEM-HB] applied per-session voice override:', chosenVoiceId);
+      }
+
       const userOnConnect = cfg.onConnect;
       cfg.onConnect = (info) => {
         lastConversationId = info?.conversationId || null;
         console.log('[MEM-HB] onConnect fired — conversationId:', lastConversationId);
+        document.dispatchEvent(new CustomEvent('thinkinbuddy:call-connected'));
         if (typeof userOnConnect === 'function') try { userOnConnect(info); } catch {}
       };
       const userOnMessage = cfg.onMessage;
@@ -743,7 +908,17 @@
         // (source: 'user'|'ai') per ElevenLabs' documented client SDK shape.
         const turnRole = msg?.source === 'user' ? 'user' : 'agent';
         const turnContent = typeof msg?.message === 'string' ? msg.message : (typeof msg?.text === 'string' ? msg.text : null);
-        if (turnContent) fireConversationTurn(turnRole, turnContent, msg);
+        if (turnContent) {
+          fireConversationTurn(turnRole, turnContent, msg);
+          // EXPORT FIX: the export menu builds from `currentHistory`, which
+          // previously only ever grew on the TEXT path (sendToJarvis). A voice
+          // brain dump left it empty, so Export produced a header and nothing
+          // else. currentHistory lives in the next <script> block, so hand the
+          // turn over by event rather than reaching across scopes.
+          document.dispatchEvent(new CustomEvent('thinkinbuddy:turn', {
+            detail: { role: turnRole === 'user' ? 'user' : 'assistant', content: turnContent },
+          }));
+        }
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
           console.log('[MEM-HB] idle timer expired — firing extract-memories');
@@ -759,15 +934,44 @@
         stopImagePoller();
         stopVideoPoller();
         fireExtractMemories('disconnect');
+        document.dispatchEvent(new CustomEvent('thinkinbuddy:call-ended'));
         if (typeof userOnDisconnect === 'function') try { userOnDisconnect(info); } catch {}
       };
     });
 
-    window.addEventListener('pagehide', () => {
-      console.log('[MEM-HB] pagehide fired');
+    // pagehide fires for TWO very different situations, and treating them the
+    // same is what used to end a call the moment the phone was pocketed:
+    //
+    //   e.persisted === true  -> the page is going into the back/forward cache.
+    //                            Locking the screen or switching apps on iOS
+    //                            Safari lands here. The page is frozen, NOT
+    //                            destroyed, and pageshow will revive it.
+    //   e.persisted === false -> a real teardown (tab closed, navigation away).
+    //
+    // Only the second is terminal. Firing extract-memories on the first also
+    // latched extractFired = true, so when the call genuinely ended later the
+    // real disconnect was skipped ("fire skipped — already fired") and the
+    // conversation was never persisted.
+    window.addEventListener('pagehide', (e) => {
+      if (e.persisted) {
+        console.log('[MEM-HB] pagehide (bfcache freeze) — not terminal, keeping session');
+        return;
+      }
+      console.log('[MEM-HB] pagehide (teardown) — firing extract-memories');
       stopImagePoller();
       stopVideoPoller();
       fireExtractMemories('pagehide');
+    });
+
+    // Coming back from the bfcache: restart the media pollers that the freeze
+    // suspended, so images/videos generated mid-call still surface.
+    window.addEventListener('pageshow', (e) => {
+      if (!e.persisted) return;
+      console.log('[MEM-HB] pageshow — restored from bfcache');
+      if (lastConversationId && !extractFired) {
+        startImagePoller();
+        startVideoPoller();
+      }
     });
   </script>
 
@@ -1090,9 +1294,382 @@
       }
     });
 
-    // ─── Settings panel (voice picker) ────────────────────────────────
+    // ══ VOICE TURNS → currentHistory (export fix) ═══════════════════════
+    // The ElevenLabs path posts each turn to /api/conversation-turn, but never
+    // touched currentHistory — which is the ONLY thing the export menu reads
+    // (buildExportText iterates it). So exporting after a voice brain dump
+    // produced a file containing just the header line. Mirroring turns here
+    // makes all five existing export actions work for voice sessions, using
+    // the same localStorage history the text path already persists.
+    document.addEventListener('thinkinbuddy:turn', (e) => {
+      const { role, content } = e.detail || {};
+      if (!content) return;
+      const last = currentHistory[currentHistory.length - 1];
+      // The widget can re-emit the same partial turn; don't duplicate it.
+      if (last && last.role === role && last.content === content) return;
+      currentHistory.push({ role, content });
+      saveHistory(currentHistory);
+    });
+
+    // ══ BACKGROUND AUDIO ("pocket mode") ════════════════════════════════
+    // Goal: lock the screen, put the phone in a pocket, keep talking over
+    // Bluetooth. What stops that today:
+    //
+    //  1. Nothing in this app ever set navigator.mediaSession. Without media
+    //     metadata the OS has no media notification for the tab, so Android
+    //     treats it as an ordinary backgrounded page and is free to throttle
+    //     its timers and tear down the socket.
+    //  2. The ElevenLabs SDK plays agent audio through an <audio> element fed
+    //     by createMediaStreamDestination() (node_modules/@elevenlabs/client/
+    //     dist/utils/output.js:20-30). A MediaStream-backed element does not
+    //     reliably register as an OS-level media session the way a normal
+    //     media resource does — so no notification, no transport controls.
+    //  3. The SDK's own wake lock is navigator.wakeLock.request("screen")
+    //     (dist/VoiceConversation.js:15, enabled by default at :33). A screen
+    //     wake lock is released by the browser as soon as the page is hidden,
+    //     which is exactly when pocket mode begins — it keeps the screen ON
+    //     while you are looking at it and does nothing once you are not.
+    //
+    // Fix: hold a real, conventional looping audio element (silent) for the
+    // duration of the call and publish mediaSession metadata. That gives the
+    // OS a media session to attach to, which is what keeps the tab resident
+    // and lights up the Bluetooth transport controls.
+    const BG_AUDIO_KEY = 'thinkbuddy_bgaudio_v1';
+
+    function bgAudioPrefs() {
+      try {
+        const p = JSON.parse(localStorage.getItem(BG_AUDIO_KEY) || 'null');
+        // Background on by default; keep-awake off by default (battery).
+        return { background: p ? p.background !== false : true, keepAwake: !!(p && p.keepAwake) };
+      } catch (e) { return { background: true, keepAwake: false }; }
+    }
+
+    // A one-second silent WAV, built at runtime so there's no giant base64
+    // blob in the source. Looped, it is a legitimate ongoing media resource.
+    function silentWavUrl() {
+      const sampleRate = 8000, seconds = 1;
+      const frames = sampleRate * seconds;
+      const buf = new ArrayBuffer(44 + frames * 2);
+      const view = new DataView(buf);
+      const ascii = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+      ascii(0, 'RIFF');  view.setUint32(4, 36 + frames * 2, true);
+      ascii(8, 'WAVE');  ascii(12, 'fmt ');
+      view.setUint32(16, 16, true);          // PCM chunk size
+      view.setUint16(20, 1, true);           // format = PCM
+      view.setUint16(22, 1, true);           // mono
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);           // block align
+      view.setUint16(34, 16, true);          // bits per sample
+      ascii(36, 'data'); view.setUint32(40, frames * 2, true);
+      // Samples stay zero — silence.
+      return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+    }
+
+    const bgAudio = {
+      el: null, url: null, wakeLock: null, active: false, lastError: null,
+
+      async start() {
+        if (this.active) return;
+        if (!bgAudioPrefs().background) { this.note('disabled in settings'); return; }
+        try {
+          if (!this.el) {
+            this.url = silentWavUrl();
+            this.el = new Audio(this.url);
+            this.el.loop = true;
+            this.el.volume = 0.0001;   // inaudible, but a real playing stream
+            this.el.setAttribute('playsinline', '');
+          }
+          await this.el.play();
+          this.active = true;
+          this.lastError = null;
+          this.publishMetadata();
+          await this.acquireWakeLock();
+          this.note('running');
+        } catch (err) {
+          // Autoplay policy can reject this if we ever get here without a
+          // user gesture. Report it rather than pretending it worked.
+          this.lastError = err?.message || String(err);
+          this.active = false;
+          this.note('failed');
+        }
+        refreshBgAudioStatus();
+      },
+
+      publishMetadata() {
+        if (!('mediaSession' in navigator)) return;
+        const buddy = currentUser?.buddyName || 'ThinkinBuddy';
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: `${buddy} — listening`,
+          artist: currentUser?.name ? `Talking with ${currentUser.name}` : 'Voice session',
+          album: 'ThinkinBuddy',
+          artwork: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' }],
+        });
+        navigator.mediaSession.playbackState = 'playing';
+        // Handlers must exist for the OS to render transport controls at all.
+        const stop = () => { this.stop(); };
+        try {
+          navigator.mediaSession.setActionHandler('pause', stop);
+          navigator.mediaSession.setActionHandler('stop', stop);
+          navigator.mediaSession.setActionHandler('play', () => this.start());
+        } catch (e) { /* older browsers reject unknown actions */ }
+      },
+
+      async acquireWakeLock() {
+        if (!bgAudioPrefs().keepAwake) return;
+        if (!('wakeLock' in navigator)) return;
+        try { this.wakeLock = await navigator.wakeLock.request('screen'); }
+        catch (e) { /* denied or not permitted while hidden — non-fatal */ }
+      },
+
+      async stop() {
+        this.active = false;
+        try { this.el?.pause(); } catch (e) {}
+        if (this.el) { this.el.src = ''; this.el = null; }
+        if (this.url) { URL.revokeObjectURL(this.url); this.url = null; }
+        try { await this.wakeLock?.release(); } catch (e) {}
+        this.wakeLock = null;
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'none';
+          navigator.mediaSession.metadata = null;
+        }
+        this.note('stopped');
+        refreshBgAudioStatus();
+      },
+
+      note(s) { this.state = s; },
+      state: 'not started',
+    };
+    window.thinkinBuddyAudio = bgAudio;
+
+    // A screen wake lock is dropped whenever the page hides. Re-take it on
+    // return so a long call doesn't lose it after the first glance away.
+    document.addEventListener('visibilitychange', () => {
+      console.log('[BG-AUDIO] visibility:', document.visibilityState, '| keepalive active:', bgAudio.active);
+      if (document.visibilityState === 'visible' && bgAudio.active && !bgAudio.wakeLock) {
+        bgAudio.acquireWakeLock();
+      }
+    });
+
+    // Start on the widget's own :call event — that fires inside the user's
+    // click on the call button, which is the gesture autoplay policy requires.
+    document.addEventListener('elevenlabs-convai:call', () => bgAudio.start());
+    document.addEventListener('thinkinbuddy:call-ended', () => bgAudio.stop());
+
+    function applyKeepAwakePref() {
+      if (!bgAudio.active) return;
+      if (bgAudioPrefs().keepAwake) bgAudio.acquireWakeLock();
+      else { try { bgAudio.wakeLock?.release(); } catch (e) {} bgAudio.wakeLock = null; }
+    }
+
+    function refreshBgAudioStatus() {
+      const el = document.getElementById('bgAudioStatus');
+      if (!el) return;
+      const bits = [`Status: ${bgAudio.state}`];
+      if (bgAudio.lastError) bits.push(`error: ${bgAudio.lastError}`);
+      bits.push(`media session: ${'mediaSession' in navigator ? 'supported' : 'unsupported'}`);
+      bits.push(`wake lock: ${'wakeLock' in navigator ? (bgAudio.wakeLock ? 'held' : 'supported') : 'unsupported'}`);
+      el.textContent = bits.join(' · ');
+    }
+
+    // ─── Settings panel ───────────────────────────────────────────────
     const settingsPanelEl = document.getElementById('settingsPanel');
     const voiceSelectEl = document.getElementById('voiceSelect');
+
+    // ══ API KEY VAULT ═══════════════════════════════════════════════════
+    // Keys live ONLY in this browser's localStorage. They are never posted to
+    // any server for storage, never logged, and never sent anywhere except as
+    // a request header on this app's own /api call for that provider (see
+    // apiFetch below). Server-side, api/* still falls back to process.env when
+    // the header is absent, so leaving a field blank keeps today's behaviour.
+    //
+    // Each entry's `usedBy` is the real list of files that read that
+    // process.env var — verified by grep over api/ and lib/, not guessed.
+    const KEYS_STORAGE = 'thinkbuddy_keys_v1';
+    const KEY_SPECS = [
+      { id: 'OPENAI_API_KEY',     label: 'OpenAI',      hint: 'sk-…',
+        usedBy: 'image generation (gpt-image-2), chat, search, browse, video' },
+      { id: 'ANTHROPIC_API_KEY',  label: 'Anthropic',   hint: 'sk-ant-…',
+        usedBy: 'text chat, memory extraction, diary' },
+      { id: 'ELEVENLABS_API_KEY', label: 'ElevenLabs',  hint: 'sk_…',
+        usedBy: 'voice list, speak endpoint, transcript fetch' },
+      { id: 'GOOGLE_API_KEY',     label: 'Google',      hint: 'AIza…',
+        usedBy: 'Imagen image generation' },
+      { id: 'REPLICATE_API_TOKEN',label: 'Replicate',   hint: 'r8_…',
+        usedBy: 'Flux image generation' },
+      { id: 'RUNWAY_API_KEY',     label: 'Runway',      hint: 'key_…',
+        usedBy: 'video generation' },
+      { id: 'HEYGEN_API_KEY',     label: 'HeyGen',      hint: '',
+        usedBy: 'avatar video generation' },
+    ];
+
+    function loadKeys() {
+      try { return JSON.parse(localStorage.getItem(KEYS_STORAGE) || '{}'); }
+      catch (e) { return {}; }
+    }
+    function saveKeys(k) { localStorage.setItem(KEYS_STORAGE, JSON.stringify(k)); }
+
+    // Show enough to recognise a key, never enough to use it.
+    function maskKey(v) {
+      if (!v) return '';
+      if (v.length <= 10) return '•'.repeat(v.length);
+      return `${v.slice(0, 4)}${'•'.repeat(Math.min(18, v.length - 8))}${v.slice(-4)}`;
+    }
+
+    // Light the pill's dot when at least one key is stored on this device.
+    function refreshPillState() {
+      const pill = document.getElementById('settingsPill');
+      if (!pill) return;
+      const any = Object.values(loadKeys()).some(v => v && v.length);
+      pill.classList.toggle('configured', any);
+    }
+
+    // Build the key fields. Stored keys render masked and read-only until the
+    // user chooses to replace them, so a saved secret is never re-displayed.
+    function renderKeyFields() {
+      const host = document.getElementById('keyFields');
+      if (!host) return;
+      const stored = loadKeys();
+      host.innerHTML = '';
+      for (const spec of KEY_SPECS) {
+        const has = !!stored[spec.id];
+        const wrap = document.createElement('div');
+        wrap.className = 'key-field';
+        wrap.innerHTML = `
+          <div class="key-head">
+            <label for="key_${spec.id}">${spec.label}</label>
+            <span class="key-used">${spec.usedBy}</span>
+          </div>
+          <div class="key-row">
+            <input type="password" id="key_${spec.id}" autocomplete="off"
+                   spellcheck="false" placeholder="${has ? '' : (spec.hint || 'paste key')}" />
+            <button type="button" class="key-clear" data-clear="${spec.id}">${has ? 'Clear' : 'Hide'}</button>
+          </div>
+          <div class="key-stored" data-stored="${spec.id}"></div>`;
+        host.appendChild(wrap);
+
+        const input = wrap.querySelector('input');
+        const note  = wrap.querySelector('[data-stored]');
+        if (has) {
+          input.value = '';
+          input.placeholder = maskKey(stored[spec.id]);
+          note.textContent = `Saved on this device — type to replace.`;
+        } else {
+          note.textContent = '';
+        }
+
+        wrap.querySelector('.key-clear').addEventListener('click', () => {
+          const k = loadKeys();
+          if (k[spec.id]) {
+            delete k[spec.id];
+            saveKeys(k);
+            renderKeyFields();
+            refreshPillState();
+          } else {
+            // Nothing stored — this button just toggles visibility of typing.
+            input.type = input.type === 'password' ? 'text' : 'password';
+          }
+        });
+      }
+    }
+
+    // Collect anything typed into the key fields and merge over what's stored.
+    function commitKeyFields() {
+      const stored = loadKeys();
+      for (const spec of KEY_SPECS) {
+        const el = document.getElementById(`key_${spec.id}`);
+        if (!el) continue;
+        const v = el.value.trim();
+        if (v) stored[spec.id] = v;
+      }
+      saveKeys(stored);
+      refreshPillState();
+    }
+
+    // ══ apiFetch — attach user keys to this app's own /api calls only ═══
+    // Same signature as fetch(). Two rules, both enforced below:
+    //
+    //   1. Cross-origin gets NOTHING. If the URL is not a same-origin /api/
+    //      path, no key header is attached at all, so a stored secret cannot
+    //      leak to a third party even if some other code calls this.
+    //   2. Each route receives ONLY the providers it actually reads. The map
+    //      below mirrors the real process.env usage in api/ (verified by grep
+    //      per file), so e.g. the OpenAI key is never sent to /api/voices.
+    //
+    // Anything not listed gets no key headers — deny by default.
+    const ROUTE_PROVIDERS = {
+      'voices':            ['ELEVENLABS_API_KEY'],
+      'speak':             ['ELEVENLABS_API_KEY'],
+      'extract-memories':  ['ELEVENLABS_API_KEY', 'ANTHROPIC_API_KEY'],
+      'chat':              ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
+      'search':            ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
+      'browse':            ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
+      'diary':             ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
+      'memory':            ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
+      'image':             ['OPENAI_API_KEY'],
+      'image-flux':        ['REPLICATE_API_TOKEN', 'OPENAI_API_KEY'],
+      'image-imagen':      ['GOOGLE_API_KEY', 'OPENAI_API_KEY'],
+      'video':             ['RUNWAY_API_KEY', 'OPENAI_API_KEY'],
+      'video-runway':      ['RUNWAY_API_KEY', 'OPENAI_API_KEY'],
+      'video-runway-veo':  ['RUNWAY_API_KEY'],
+      'video-heygen':      ['HEYGEN_API_KEY'],
+      'video-sora':        ['OPENAI_API_KEY'],
+      'latest-video':      ['OPENAI_API_KEY'],
+    };
+
+    function apiFetch(url, opts = {}) {
+      if (typeof url !== 'string' || !url.startsWith('/api/')) return fetch(url, opts);
+      const route = url.slice(5).split(/[?#]/)[0];
+      const allowed = ROUTE_PROVIDERS[route] || [];
+      const keys = loadKeys();
+      const headers = { ...(opts.headers || {}) };
+      for (const envVar of allowed) {
+        const v = keys[envVar];
+        if (v) headers[`X-User-Key-${envVar.replace(/_API_KEY$|_API_TOKEN$/, '')}`] = v;
+      }
+      return fetch(url, { ...opts, headers });
+    }
+    window.thinkinBuddyApiFetch = apiFetch;
+
+    // Light the pill on first paint when this device already holds keys,
+    // instead of waiting for the user to open the panel and save something.
+    // Must run AFTER the consts above: loadKeys() reads KEYS_STORAGE, and its
+    // own try/catch would quietly swallow the temporal-dead-zone error and
+    // report "no keys stored" if this were hoisted above the declaration.
+    refreshPillState();
+
+    // ══ ElevenLabs voice picker ═════════════════════════════════════════
+    // Populated from /api/voices, which proxies ElevenLabs GET /v1/voices so
+    // the key never has to reach the browser unless the user supplied it.
+    const elVoiceSelectEl = document.getElementById('elVoiceSelect');
+    const EL_VOICE_KEY = 'thinkbuddy_el_voice_v1';
+    let elVoicesLoaded = false;
+
+    async function populateElevenLabsVoices() {
+      if (elVoicesLoaded || !elVoiceSelectEl) return;
+      const saved = localStorage.getItem(EL_VOICE_KEY) || '';
+      try {
+        const res = await apiFetch('/api/voices');
+        const data = await res.json();
+        if (!res.ok || !Array.isArray(data.voices)) {
+          document.getElementById('elVoiceHint').textContent =
+            `Could not load voices: ${data.error || res.status}. Add an ElevenLabs key under Keys, or set ELEVENLABS_API_KEY on the server.`;
+          return;
+        }
+        elVoiceSelectEl.innerHTML = '<option value="">Agent default</option>';
+        for (const v of data.voices) {
+          const opt = document.createElement('option');
+          opt.value = v.voice_id;
+          opt.textContent = v.category ? `${v.name} (${v.category})` : v.name;
+          if (v.voice_id === saved) opt.selected = true;
+          elVoiceSelectEl.appendChild(opt);
+        }
+        elVoicesLoaded = true;
+      } catch (e) {
+        document.getElementById('elVoiceHint').textContent =
+          'Could not reach /api/voices. Check your connection.';
+      }
+    }
 
     function populateVoices() {
       const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
@@ -1120,8 +1697,25 @@
       window.speechSynthesis.onvoiceschanged = populateVoices;
     }
 
-    document.getElementById('settingsBtn').addEventListener('click', () => {
+    // ── Tabs ──────────────────────────────────────────────────────────
+    settingsPanelEl.querySelectorAll('.tabs button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        settingsPanelEl.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b === btn));
+        settingsPanelEl.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === tab));
+        if (tab === 'voice') { populateVoices(); populateElevenLabsVoices(); }
+        if (tab === 'audio') refreshBgAudioStatus();
+      });
+    });
+
+    document.getElementById('settingsPill').addEventListener('click', () => {
+      renderKeyFields();
+      refreshPillState();
       populateVoices();
+      refreshBgAudioStatus();
+      // Reflect saved background-audio prefs each time the panel opens.
+      document.getElementById('bgAudioToggle').checked  = bgAudioPrefs().background;
+      document.getElementById('keepAwakeToggle').checked = bgAudioPrefs().keepAwake;
       settingsPanelEl.classList.remove('hidden');
     });
 
@@ -1129,12 +1723,43 @@
       settingsPanelEl.classList.add('hidden');
     });
 
-    document.getElementById('settingsTest').addEventListener('click', () => {
+    // Test speaks with whichever voice the user is currently looking at:
+    // an ElevenLabs voice if one is chosen, otherwise the browser voice.
+    document.getElementById('settingsTest').addEventListener('click', async () => {
+      const sample = "Hi, I'm ThinkinBuddy. This is what I sound like.";
+      const elVoiceId = elVoiceSelectEl?.value || '';
+
+      if (elVoiceId) {
+        const hint = document.getElementById('elVoiceHint');
+        const original = hint.textContent;
+        hint.textContent = 'Generating sample…';
+        try {
+          const res = await apiFetch('/api/speak', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: sample, voiceId: elVoiceId }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            hint.textContent = `Sample failed: ${err.error || res.status}`;
+            return;
+          }
+          const buf = await res.blob();
+          const url = URL.createObjectURL(buf);
+          const audio = new Audio(url);
+          audio.addEventListener('ended', () => URL.revokeObjectURL(url));
+          await audio.play();
+          hint.textContent = original;
+        } catch (e) {
+          hint.textContent = 'Sample failed — could not reach /api/speak.';
+        }
+        return;
+      }
+
       if (!window.speechSynthesis) return;
-      const voiceName = voiceSelectEl.value;
       const voices = window.speechSynthesis.getVoices();
-      const pick = voices.find(v => v.name === voiceName);
-      const u = new SpeechSynthesisUtterance("Hi, I'm ThinkinBuddy. This is what I sound like.");
+      const pick = voices.find(v => v.name === voiceSelectEl.value);
+      const u = new SpeechSynthesisUtterance(sample);
       if (pick) u.voice = pick;
       u.rate = 1.05;
       window.speechSynthesis.cancel();
@@ -1142,9 +1767,25 @@
     });
 
     document.getElementById('settingsSave').addEventListener('click', () => {
-      if (!currentUser) return;
-      currentUser.preferredVoice = voiceSelectEl.value || null;
-      saveUser(currentUser);
+      commitKeyFields();
+
+      if (elVoiceSelectEl) {
+        const v = elVoiceSelectEl.value || '';
+        if (v) localStorage.setItem(EL_VOICE_KEY, v);
+        else localStorage.removeItem(EL_VOICE_KEY);
+      }
+
+      const prefs = {
+        background: document.getElementById('bgAudioToggle').checked,
+        keepAwake:  document.getElementById('keepAwakeToggle').checked,
+      };
+      localStorage.setItem(BG_AUDIO_KEY, JSON.stringify(prefs));
+      applyKeepAwakePref();
+
+      if (currentUser) {
+        currentUser.preferredVoice = voiceSelectEl.value || null;
+        saveUser(currentUser);
+      }
       settingsPanelEl.classList.add('hidden');
     });
 
