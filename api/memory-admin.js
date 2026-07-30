@@ -35,7 +35,7 @@
 //   restricts *browser* origins — it is NOT authentication.
 
 import { getPool } from './memory.js';
-import { applyBrowserCors } from '../lib/security.js';
+import { applyBrowserCors, requireWebhookSecret } from '../lib/security.js';
 
 // Columns safe to return to the client (everything except the raw embedding,
 // which is large and useless to a human reviewer).
@@ -76,6 +76,25 @@ export default async function handler(req, res) {
   if (origin && !corsOk) {
     return res.status(403).json({ error: 'Origin not allowed' });
   }
+
+  // ─── AUTH (closes the TODO(auth) hole documented at the top of this file) ──
+  // This endpoint can read, edit and HARD-DELETE any user's memories from a
+  // bare userId in the query string. It had no authentication at all, and an
+  // export button is about to make it discoverable.
+  //
+  // Safe to hard-gate: NOTHING calls this route. Verified by grepping the repo
+  // for "memory-admin" — the only hits are this file's own comments — and
+  // against the live agent's 11 registered tool_ids, which are save_memory,
+  // generate_image, browse_url, search_web, save_task_for_clyde,
+  // generate_video_sora, generate_video_runway, generate_image_imagen,
+  // generate_image_flux, set_alarm and recall_memory. No caller means no
+  // regression, so this one closes by default rather than behind a flag.
+  //
+  // CORS is NOT authentication (see lib/security.js header): a non-browser
+  // client sends no Origin at all and sails past the check above. Proven live
+  // against /api/chat, where `curl -H 'Origin: https://jarvis-troy.vercel.app'`
+  // turned a 403 into a 400. The secret is the gate; the origin check is not.
+  if (!requireWebhookSecret(req, res)) return;
 
   const userId = req.query?.userId;
   if (!userId) return res.status(400).json({ error: 'userId required' });

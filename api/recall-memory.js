@@ -16,6 +16,7 @@
 // the LLM as raw context for it to speak naturally, not parsed structurally.
 
 import { retrieveMemories } from './memory.js';
+import { requireToolAuth } from '../lib/security.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -23,6 +24,14 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  // Two costs on every call: an OpenAI embedding (memory.js:115) and a read of
+  // whatever this userId has stored. Since genUserId() (index.html:1003-1008)
+  // returns the literal string 'troy' for everyone, the userId is not a secret
+  // and this endpoint would hand a stranger Troy's memories on request.
+  //
+  // NO-OP UNTIL ENFORCE_TOOL_AUTH=1 — see lib/security.js:requireToolAuth.
+  if (!requireToolAuth(req, res)) return;
 
   const userId = req.body?.userId;
   const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';

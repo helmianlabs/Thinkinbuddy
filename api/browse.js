@@ -12,6 +12,7 @@
 
 import { isSafeUrl, UNSAFE_SITE_MSG } from '../lib/safeBrowse.js';
 import { isAllowed } from '../lib/moderation.js';
+import { requireToolAuth } from '../lib/security.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -19,6 +20,13 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  // Spends OPENAI_API_KEY (moderation, :74) then ANTHROPIC_API_KEY (:80), and
+  // additionally fetches an arbitrary attacker-supplied URL from Vercel's
+  // network. Had no gate: `POST {}` returned 400 "url required" from anywhere.
+  //
+  // NO-OP UNTIL ENFORCE_TOOL_AUTH=1 — see lib/security.js:requireToolAuth.
+  if (!requireToolAuth(req, res)) return;
 
   const url = req.body?.url || req.query?.url;
   if (!url) return res.status(400).json({ error: 'url required' });

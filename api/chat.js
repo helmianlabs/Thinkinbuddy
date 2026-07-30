@@ -5,26 +5,59 @@
 // we expose the [ACTION:*] tag protocol instead of the tool block.
 
 import { buildSystemPrompt } from '../lib/personality.js';
-import { applyBrowserCors } from '../lib/security.js';
+import { applyBrowserCors, requireBrowserFetch } from '../lib/security.js';
 import { isAllowed } from '../lib/moderation.js';
 
-export default async function handler(req, res) {
-  // Origin allowlist — replaces the previous `*` wildcard that let
-  // anyone with the URL spend Troy's Anthropic credits.
-  const originOk = applyBrowserCors(req, res);
+// Payload ceilings. A single request cannot be made expensive: input tokens are
+// what cost money here (max_tokens caps only the OUTPUT at 400), so an
+// unbounded messages array is the cheap way to run up a bill on someone else's
+// key. These are far above any real conversation from this UI.
+const MAX_MESSAGES = 100;
+const MAX_TOTAL_CHARS = 100_000; // ~25k tokens of input
 
+function totalChars(messages) {
+  let n = 0;
+  for (const m of messages) {
+    const c = m?.content;
+    if (typeof c === 'string') n += c.length;
+    else if (Array.isArray(c)) for (const b of c) n += typeof b === 'string' ? b.length : (b?.text?.length || 0);
+    if (n > MAX_TOTAL_CHARS) return n; // stop counting once over
+  }
+  return n;
+}
+
+export default async function handler(req, res) {
+  // NOT AUTHENTICATION — see lib/security.js:requireBrowserFetch. This makes
+  // the endpoint cost more to abuse; it does not make it safe. A caller who
+  // sets Origin plus the three Sec-Fetch-* headers still gets in, and there is
+  // no way to stop that without a real user credential, which this app has
+  // none of. Do not mark /api/chat "secured" on the strength of this.
+  //
+  // Preflight must still answer on origin alone: a browser sends OPTIONS
+  // WITHOUT Sec-Fetch-Mode: cors on the actual request semantics, and failing
+  // the preflight would block the very browsers this is meant to keep working.
+  const originOk = applyBrowserCors(req, res);
   if (req.method === 'OPTIONS') {
     return res.status(originOk ? 200 : 403).end();
   }
-  if (!originOk) {
-    return res.status(403).json({ error: 'Origin not allowed' });
-  }
+  if (!requireBrowserFetch(req, res)) return; // writes 403 itself
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { messages, userContext, mode: rawMode } = req.body || {};
   const VALID_MODES = ['default', 'spanish_tutor', 'feynman_module1'];
   const mode = VALID_MODES.includes(rawMode) ? rawMode : 'default';
   if (!messages?.length) return res.status(400).json({ error: 'messages required' });
+
+  // Cap BEFORE the moderation call and the Anthropic call — both cost money.
+  if (!Array.isArray(messages)) {
+    return res.status(400).json({ error: 'messages must be an array' });
+  }
+  if (messages.length > MAX_MESSAGES) {
+    return res.status(413).json({ error: `too many messages (max ${MAX_MESSAGES})` });
+  }
+  if (totalChars(messages) > MAX_TOTAL_CHARS) {
+    return res.status(413).json({ error: `conversation too large (max ${MAX_TOTAL_CHARS} characters)` });
+  }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ reply: 'Anthropic API key not configured.' });

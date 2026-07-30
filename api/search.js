@@ -13,6 +13,7 @@
 
 import { isSafeQuery, UNSAFE_QUERY_MSG } from '../lib/safeBrowse.js';
 import { isAllowed } from '../lib/moderation.js';
+import { requireToolAuth } from '../lib/security.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -21,6 +22,17 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  // Spends OPENAI_API_KEY (moderation, :36) then ANTHROPIC_API_KEY (:42) on
+  // every call, and had no gate of any kind: `POST {}` from anywhere on the
+  // internet returned 400 "query required", i.e. it reached parameter
+  // validation with nothing standing in front of it. Gate goes here, ahead of
+  // both provider calls, so an unauthorized caller costs nothing.
+  //
+  // NO-OP UNTIL ENFORCE_TOOL_AUTH=1 — see lib/security.js:requireToolAuth.
+  // The only caller is the agent's search_web tool, which does not send the
+  // header yet. Read that comment before assuming this endpoint is closed.
+  if (!requireToolAuth(req, res)) return;
 
   // Accept query from body (POST JSON) or URL query string (ElevenLabs webhook)
   const query = req.body?.query || req.query?.query;
