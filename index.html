@@ -2060,11 +2060,64 @@
         try { recognition.start(); } catch(e) {}
       }
 
+      // ─── THE HELMION RELAY, BAKED IN ─────────────────────────────────────
+      // Troy has no practical way to read a 90-character URL and a 43-character
+      // key out loud to the buddy, and should not have to. The address lives in
+      // the app instead, so the relay is just there.
+      //
+      // WHAT CROSSES IT: TEXT. Nothing else. There is no command, no path, no
+      // shell string, and the desktop end (src/relay/protocol.mjs) drops any
+      // frame kind it does not recognise rather than forwarding it. A line sent
+      // here becomes a line Helmion SHOWS. Letting the phone actually RUN
+      // anything is a separate, deliberate decision that has not been made.
+      // NO KEY IN HERE, DELIBERATELY. The first cut inlined the relay URL and
+      // its key so the buddy simply had them. That works and it publishes a live
+      // credential on a public page — anyone viewing source could send text to
+      // Troy's Helmion. It goes through /api/relay-proxy instead, which holds
+      // the secret server-side and fixes the channel and role so a browser
+      // cannot claim to be the desktop.
+      let relayCursor = null;
+
+      // Send one line to the desktop. Never throws — offline is normal in a car
+      // and the conversation has to carry on regardless.
+      async function relaySend(text) {
+        const body = String(text || '').trim();
+        if (!body || body.length > 4000) return;
+        try {
+          await fetch('/api/relay-proxy', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ body }),   // the field is `body`, not `text`
+          });
+        } catch (e) {}
+      }
+
+      // Poll for anything the desktop said. since=0 means "just woke up" and
+      // deliberately returns no history — it hands back a cursor to read from.
+      async function relayPoll() {
+        try {
+          const r = await fetch(`/api/relay-proxy?since=${relayCursor ?? 0}`);
+          if (!r.ok) return;
+          const d = await r.json();
+          if (typeof d.cursor === 'number') relayCursor = d.cursor;
+          for (const m of d.messages || []) {
+            if (m.from !== 'desktop') continue;
+            transcriptEl.textContent = 'Helmion: ' + m.body;
+            speak(m.body);
+          }
+        } catch (e) {}
+      }
+      setInterval(() => { if (sessionActive) relayPoll(); }, 4000);
+
       async function sendToJarvis(userText) {
         currentHistory.push({ role: 'user', content: userText });
         saveHistory(currentHistory);
         setStatus('THINKING...', 'thinking');
         transcriptEl.textContent = '';
+
+        // Everything Troy says also reaches the desktop. Fire and forget — the
+        // buddy must never wait on the relay to answer him.
+        relaySend(userText);
 
         try {
           const res = await fetch(CONFIG.apiEndpoint, {
