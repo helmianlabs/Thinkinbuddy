@@ -2094,6 +2094,20 @@
       }
 
       recognition.onstart = () => { isListening = true; setStatus('LISTENING...', 'listening'); transcriptEl.textContent = ''; };
+      // ANDROID PAUSES SPEECH WHEN THE SCREEN GOES OFF, and it does it quietly.
+      // Chrome on Android suspends speechSynthesis the moment the page is
+      // backgrounded, mid-sentence, with no event. The utterance is not cancelled
+      // — it is frozen — so calling resume() puts it straight back. Poll it while
+      // a session is live and the buddy keeps talking in Troy's pocket.
+      //
+      // Cheap on purpose: it does nothing at all unless a session is running AND
+      // the engine reports itself paused, so it is not a timer burning battery in
+      // the background for nothing.
+      setInterval(() => {
+        if (!sessionActive) return;
+        try { if (synth.paused) synth.resume(); } catch (e) {}
+      }, 3000);
+
       recognition.onend = () => {
         isListening = false;
         if (sessionActive && !isSpeaking) setTimeout(startListening, 800);
