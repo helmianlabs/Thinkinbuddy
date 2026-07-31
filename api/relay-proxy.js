@@ -18,7 +18,11 @@
 
 const RELAY_URL =
   process.env.HELMION_RELAY_URL || 'https://thinkinbuddy.vercel.app/api/relay-http';
-const CHANNEL = process.env.HELMION_RELAY_CHANNEL || 'troy';
+
+// The channel name travels in URLs that get read aloud, pasted into chats and
+// shown on screens. It was Troy's first name; it is now a word that identifies
+// nothing about anybody. Same lane, different label.
+const CHANNEL = process.env.HELMION_RELAY_CHANNEL || 'pilot';
 const ROLE = 'phone';
 
 export default async function handler(req, res) {
@@ -37,6 +41,28 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
+      // SEND OVER GET, because some callers genuinely cannot POST.
+      //   /api/relay-proxy?send=hello
+      // A client that can only fetch a URL can still speak. This is the same
+      // send path as POST — it is a convenience, not a second, weaker door: the
+      // role and channel are still fixed server-side and the secret still never
+      // reaches the caller.
+      const outbound = typeof req.query?.send === 'string' ? req.query.send.trim() : '';
+      if (outbound) {
+        if (outbound.length > 4000) {
+          res.status(413).json({ error: `message is ${outbound.length} chars, over the 4000 limit` });
+          return;
+        }
+        const sent = await fetch(url, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ body: outbound }),
+        });
+        const sentText = await sent.text();
+        res.status(sent.status).setHeader('content-type', 'application/json').send(sentText);
+        return;
+      }
+
       const since = Number(req.query?.since);
       url.searchParams.set('since', Number.isSafeInteger(since) && since >= 0 ? String(since) : '0');
 
