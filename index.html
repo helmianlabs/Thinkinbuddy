@@ -2114,6 +2114,38 @@
         if (final) sendToJarvis(final.trim());
       };
 
+      // ─── POCKET MODE ─────────────────────────────────────────────────────
+      // Troy: "set ThinkinBuddy up just like Spotify." Lock the screen, put the
+      // phone in your pocket, keep talking.
+      //
+      // WHY IT NEEDED ANYTHING AT ALL. This app speaks with speechSynthesis, and
+      // every mobile browser suspends that the moment the page is backgrounded —
+      // it is treated as page activity, not as media. Nothing here had ever told
+      // the OS this app plays audio, so locking the screen killed the
+      // conversation. pocket-mode.js declares it as a media app with a silent
+      // keeper track, which is the documented way to be kept alive, and puts a
+      // real card with working controls on the lock screen.
+      //
+      // ARMED FROM THE ORB TAP ON PURPOSE. Browsers refuse to start audio without
+      // a genuine user gesture, so arming it anywhere else would fail silently —
+      // and a pocket mode that quietly did not arm is exactly the class of lie
+      // this project keeps finding.
+      let pocket = null;
+      async function armPocketMode() {
+        if (!pocket) {
+          const mod = await import('./lib/pocket-mode.js');
+          pocket = mod.createPocketMode({
+            appName: 'ThinkinBuddy',
+            buddyName: currentUser?.buddyName || 'Mark',
+            onPlay: () => { if (!sessionActive) orb.click(); },
+            onPause: () => { if (sessionActive) orb.click(); },
+          });
+        }
+        const armed = await pocket.start();
+        if (!armed.ok) setStatus('POCKET MODE OFF — ' + armed.reason, '');
+        return armed.ok;
+      }
+
       orb.addEventListener('click', () => {
         if (isSpeaking) {
           stopSpeaking();
@@ -2123,11 +2155,13 @@
         if (!sessionActive) {
           sessionActive = true;
           setStatus('SESSION ON — TAP TO END', 'active');
+          armPocketMode();
           startListening();
         } else {
           sessionActive = false;
           recognition.stop();
           stopSpeaking();
+          pocket?.stop();
           // Keep history in localStorage; don't wipe on session end
           setStatus('TAP TO START', '');
           transcriptEl.textContent = '';
