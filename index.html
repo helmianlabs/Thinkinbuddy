@@ -2130,21 +2130,76 @@
       // a genuine user gesture, so arming it anywhere else would fail silently —
       // and a pocket mode that quietly did not arm is exactly the class of lie
       // this project keeps finding.
-      let pocket = null;
+      // INLINED, NOT IMPORTED, and that is the whole reason this works.
+      // The first cut lived in lib/pocket-mode.js and was loaded with a dynamic
+      // import. Vite bundles from the script tags in this file and does not copy
+      // that folder, so the deployed site answered 404 for it — the import would
+      // have failed on Troy's phone and pocket mode would have been silently off
+      // while looking shipped. Caught by fetching the URL after deploying rather
+      // than assuming. It stays inline so it cannot go missing again.
+      const SILENT_WAV = 'data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQ4AAAAAAAAAAAAAAAAAAAAAAA==';
+      let pocketKeeper = null, pocketWakeLock = null, pocketOn = false;
+
       async function armPocketMode() {
-        if (!pocket) {
-          const mod = await import('./lib/pocket-mode.js');
-          pocket = mod.createPocketMode({
-            appName: 'ThinkinBuddy',
-            buddyName: currentUser?.buddyName || 'Mark',
-            onPlay: () => { if (!sessionActive) orb.click(); },
-            onPause: () => { if (sessionActive) orb.click(); },
-          });
+        try {
+          if (!pocketKeeper) {
+            pocketKeeper = new Audio(SILENT_WAV);
+            pocketKeeper.loop = true;
+            // 0.0001 and not 0: some browsers do not count a muted element as
+            // playing, and "playing audio" is the only thing that keeps the app
+            // alive with the screen off.
+            pocketKeeper.volume = 0.0001;
+            pocketKeeper.setAttribute('playsinline', '');
+          }
+          await pocketKeeper.play();
+          pocketOn = true;
+
+          if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+              title: 'Talking with ' + (currentUser?.buddyName || 'Mark'),
+              artist: 'ThinkinBuddy',
+              album: 'ThinkinBuddy',
+            });
+            navigator.mediaSession.playbackState = 'playing';
+            // Wired to the real conversation. A lock-screen button that does
+            // nothing is worse than no button.
+            navigator.mediaSession.setActionHandler('play', () => { if (!sessionActive) orb.click(); });
+            navigator.mediaSession.setActionHandler('pause', () => { if (sessionActive) orb.click(); });
+          }
+
+          if ('wakeLock' in navigator && !pocketWakeLock) {
+            try {
+              pocketWakeLock = await navigator.wakeLock.request('screen');
+              pocketWakeLock.addEventListener('release', () => { pocketWakeLock = null; });
+            } catch (e) { /* refused is fine — the audio path is what matters */ }
+          }
+          return true;
+        } catch (err) {
+          // Surfaced, never swallowed. A pocket mode that quietly failed to arm
+          // is the exact defect this project keeps finding.
+          setStatus('POCKET MODE OFF — ' + err.message, '');
+          return false;
         }
-        const armed = await pocket.start();
-        if (!armed.ok) setStatus('POCKET MODE OFF — ' + armed.reason, '');
-        return armed.ok;
       }
+
+      function disarmPocketMode() {
+        try { pocketKeeper?.pause(); } catch (e) {}
+        pocketOn = false;
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+        try { pocketWakeLock?.release(); } catch (e) {}
+        pocketWakeLock = null;
+      }
+
+      // A wake lock is dropped by the OS on lock, by design. Retake it only if a
+      // conversation is still meant to be running — never hold one idle.
+      document.addEventListener('visibilitychange', async () => {
+        if (document.visibilityState === 'visible' && pocketOn && 'wakeLock' in navigator && !pocketWakeLock) {
+          try {
+            pocketWakeLock = await navigator.wakeLock.request('screen');
+            pocketWakeLock.addEventListener('release', () => { pocketWakeLock = null; });
+          } catch (e) {}
+        }
+      });
 
       orb.addEventListener('click', () => {
         if (isSpeaking) {
@@ -2161,7 +2216,7 @@
           sessionActive = false;
           recognition.stop();
           stopSpeaking();
-          pocket?.stop();
+          disarmPocketMode();
           // Keep history in localStorage; don't wipe on session end
           setStatus('TAP TO START', '');
           transcriptEl.textContent = '';
