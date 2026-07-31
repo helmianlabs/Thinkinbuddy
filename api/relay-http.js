@@ -33,7 +33,22 @@ const PAGE_LIMIT = 200;
 // missed 30s polls — one missed poll is a hiccup, three is gone.
 const PRESENCE_WINDOW_SECONDS = 95;
 
-const DB_URL = process.env.DATABASE_URL_MEMORY || process.env.DATABASE_URL;
+// WHICH DATABASE, AND WHY THE ORDER CHANGED (2026-07-31).
+//
+// This read DATABASE_URL_MEMORY first. That variable was set 58 days ago and
+// points at a database that is not the one this project actually uses now: after
+// creating helmion_relay and helmion_relay_presence in `claude_memory` — the
+// database api/mcp.js talks to and the one claude-memory-api's own DATABASE_URL
+// reaches — this endpoint still answered "the relay tables do not exist yet".
+// The tables were real; the endpoint was looking somewhere else.
+//
+// NEON_CLAUDE_MEMORY_URL is the live one (set 33 days ago, and what the working
+// memory vault uses), so it goes first. The old name stays as a fallback so an
+// environment that only has it keeps working — this is additive, not a swap.
+const DB_URL =
+  process.env.NEON_CLAUDE_MEMORY_URL ||
+  process.env.DATABASE_URL_MEMORY ||
+  process.env.DATABASE_URL;
 
 let _pool = null;
 function getPool() {
