@@ -40,7 +40,10 @@ function timingSafeEqual(a, b) {
 
 function isAuthorized(req) {
   const secret = process.env.MCP_SECRET;
-  if (!secret) return true; // auth disabled — GET status warns about this
+  // Fail CLOSED. An unset secret used to mean "auth disabled" — the single
+  // most dangerous state a shipped endpoint can silently fall into, since it
+  // takes a missing env var, not an attack, to open it to the internet.
+  if (!secret) return false;
   const header = req.headers['authorization'] || '';
   const bearer = /^Bearer\s+(.+)$/i.exec(header);
   if (bearer && timingSafeEqual(bearer[1].trim(), secret)) return true;
@@ -171,7 +174,7 @@ export default async function handler(req, res) {
       ok: true,
       server: SERVER_NAME,
       version: SERVER_VERSION,
-      auth: process.env.MCP_SECRET ? 'secret required (?key= or Bearer header)' : 'DISABLED — set MCP_SECRET to protect this endpoint',
+      auth: process.env.MCP_SECRET ? 'secret required (?key= or Bearer header)' : 'MCP_SECRET not set — every request is refused until it is',
       tools: TOOLS.map((t) => t.name)
     });
   }
