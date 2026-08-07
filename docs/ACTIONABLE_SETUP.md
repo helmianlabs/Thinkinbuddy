@@ -44,7 +44,7 @@ Actionable speaks**. So:
 
 | # | Do this | Why |
 |---|---|---|
-| 1 | `cd jarvis` then `node scripts/setup-actionable-db.mjs "<your Neon URL>"` | creates the tables. Safe to re-run |
+| 1 | `cd thinkinbuddy` then `node scripts/setup-actionable-db.mjs "<your Neon URL>"` | creates the tables. Safe to re-run |
 | 2 | `node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"` then `printf 'THAT' \| vercel env add ACTIONABLE_API_KEY production` | without it, anyone guessing your userId can read your journal |
 | 3 | `vercel --prod` | ship the new routes |
 | 4 | In `C:\Users\troyh\actionable` create `.env` with `EXPO_PUBLIC_API_BASE=https://thinkinbuddy.vercel.app` and `EXPO_PUBLIC_USER_ID=troy` | point the app at your server |
@@ -290,7 +290,7 @@ is not holding.
 
 ## The `package.json` edit — who did it and why
 
-`jarvis/package.json` shows as modified. It was **not** an `npm` normalisation:
+`thinkinbuddy/package.json` shows as modified. It was **not** an `npm` normalisation:
 it was a deliberate fix, made by a second Claude session working this same tree
 at the same time, which had been asked to repair exactly this defect.
 
@@ -310,6 +310,6 @@ Reverting would restore the duplicate-key defect, so leave it. If you want the
 original bytes back anyway:
 
 ```bash
-cd C:\Users\troyh\n8n_Pod_Uploader_jarvis
-git checkout HEAD -- jarvis/package.json
+cd C:\Users\troyh\n8n_Pod_Uploader_thinkinbuddy
+git checkout HEAD -- thinkinbuddy/package.json
 ```

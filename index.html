@@ -911,7 +911,7 @@
         if (turnContent) {
           fireConversationTurn(turnRole, turnContent, msg);
           // EXPORT FIX: the export menu builds from `currentHistory`, which
-          // previously only ever grew on the TEXT path (sendToJarvis). A voice
+          // previously only ever grew on the TEXT path (sendToThinkinBuddy). A voice
           // brain dump left it empty, so Export produced a header and nothing
           // else. currentHistory lives in the next <script> block, so hand the
           // turn over by event rather than reaching across scopes.
@@ -2022,7 +2022,7 @@
         if (pick) utter.voice = pick;
 
         isSpeaking = true;
-        setStatus('JARVIS SPEAKING', 'speaking');
+        setStatus('THINKINBUDDY SPEAKING', 'speaking');
         utter.onend = () => {
           isSpeaking = false;
           try { recognition.stop(); } catch(e) {}
@@ -2109,7 +2109,7 @@
       }
       setInterval(() => { if (sessionActive) relayPoll(); }, 4000);
 
-      async function sendToJarvis(userText) {
+      async function sendToThinkinBuddy(userText) {
         currentHistory.push({ role: 'user', content: userText });
         saveHistory(currentHistory);
         setStatus('THINKING...', 'thinking');
@@ -2178,7 +2178,7 @@
           else interim += e.results[i][0].transcript;
         }
         transcriptEl.textContent = final || interim;
-        if (final) sendToJarvis(final.trim());
+        if (final) sendToThinkinBuddy(final.trim());
       };
 
       // ─── POCKET MODE ─────────────────────────────────────────────────────

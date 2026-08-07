@@ -24,7 +24,7 @@
 //
 // SAFE TO RE-RUN: every DDL uses IF NOT EXISTS.
 //
-// USAGE (from jarvis/ project root):
+// USAGE (from thinkinbuddy/ project root):
 //   node scripts/setup-conversation-log-db.mjs "postgresql://USER:PASS@HOST/db?sslmode=require"
 // or set the env var first:
 //   $env:DATABASE_URL_MEMORY="postgresql://..."; node scripts/setup-conversation-log-db.mjs

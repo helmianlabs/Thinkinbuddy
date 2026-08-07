@@ -7,7 +7,7 @@ fixed until step 2.
 
 ## What was open, and how it was proven
 
-Probed live against `https://jarvis-troy.vercel.app` on 2026-07-30 with empty
+Probed live against `https://thinkinbuddy.vercel.app` on 2026-07-30 with empty
 bodies, which fail parameter validation before spending anything:
 
 | Endpoint | Result | What it spends |
@@ -20,7 +20,7 @@ Reaching parameter validation means nothing stood in front of them. A 400 is
 not a gate.
 
 `/api/chat` looked gated but is not: with no `Origin` header it returns 403,
-and with `-H 'Origin: https://jarvis-troy.vercel.app'` it returns
+and with `-H 'Origin: https://thinkinbuddy.vercel.app'` it returns
 `400 {"error":"messages required"}`. **CORS is not authentication** — the file
 that implements it says so at `lib/security.js:8-13`. A browser honors it;
 `curl` sets the header and walks in.
@@ -95,7 +95,7 @@ the three tools stop working.
 ### Verify step 2
 
 ```
-curl -s -X POST https://jarvis-troy.vercel.app/api/search \
+curl -s -X POST https://thinkinbuddy.vercel.app/api/search \
   -H 'Content-Type: application/json' -d '{"query":"test"}'
 ```
 Expect `401 {"result":"Unauthorized"}`. Anything else means the hole is open.

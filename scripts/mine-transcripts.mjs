@@ -1,10 +1,10 @@
 // scripts/mine-transcripts.mjs
 // ---------------------------------------------------------------------------
-// Mine ALL ElevenLabs (Jarvis) conversation transcripts for agent
+// Mine ALL ElevenLabs (ThinkinBuddy) conversation transcripts for agent
 // agent_4401kqcb0w2dey28c69zhchv7ayn into Troy's live persistent-memory DB
 // (Neon `thinkinbuddy_memory`, table memory_items, user_id='troy').
 //
-// Pipeline (per the task spec + jarvis/api/extract-memories.js patterns):
+// Pipeline (per the task spec + thinkinbuddy/api/extract-memories.js patterns):
 //   1. List ALL conversations (paginate cursor/has_more until exhausted).
 //   2. Fetch each transcript (role + message turns).
 //   3. Extract durable memory candidates via claude-haiku-4-5 + EXTRACT_PROMPT
@@ -30,7 +30,7 @@
 //                WOULD be inserted vs skipped. Use to preview safely.
 //   --limit=N    Process only the first N conversations (for a small test run).
 //
-// Run from the jarvis repo dir (pg lives in its node_modules):
+// Run from the thinkinbuddy repo dir (pg lives in its node_modules):
 //   node scripts/mine-transcripts.mjs --dry-run --limit=3
 //   node scripts/mine-transcripts.mjs
 // ---------------------------------------------------------------------------
@@ -54,7 +54,7 @@ const LIMIT = (() => {
 })();
 
 // ---- keys from .env.local (REAL values per task) ----
-const ENV_PATH = 'C:/Users/troyh/n8n_Pod_Uploader_jarvis/jarvis/.env.local';
+const ENV_PATH = 'C:/Users/troyh/n8n_Pod_Uploader_thinkinbuddy/thinkinbuddy/.env.local';
 const env = readFileSync(ENV_PATH, 'utf8');
 const getKey = (name) => {
   const m = env.match(new RegExp('^' + name + '=(.+)$', 'm'));
@@ -76,7 +76,7 @@ const MEM_CONN = neon.replace(/\/neondb(\?|$)/, '/thinkinbuddy_memory$1');
 const pool = new Pool({ connectionString: MEM_CONN, ssl: { rejectUnauthorized: false }, max: 3 });
 
 // ---------------------------------------------------------------------------
-// PII filter + EXTRACT_PROMPT — verbatim from jarvis/api/extract-memories.js
+// PII filter + EXTRACT_PROMPT — verbatim from thinkinbuddy/api/extract-memories.js
 // (which itself is verbatim from the spec lines 262-300).
 // ---------------------------------------------------------------------------
 const PII_PATTERNS = [

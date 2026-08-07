@@ -12,7 +12,7 @@
 // clearly-fake probe row (user_id = '__setup_probe__'), runs a cosine query,
 // then deletes ONLY that probe row. It never touches real memories.
 //
-// USAGE (from jarvis/ project root):
+// USAGE (from thinkinbuddy/ project root):
 //   node scripts/setup-memory-db.mjs "postgresql://USER:PASS@HOST/db?sslmode=require"
 // or set the env var first and run with no arg:
 //   $env:DATABASE_URL_MEMORY="postgresql://..."; node scripts/setup-memory-db.mjs

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Jarvis — Desktop</title>
+  <title>ThinkinBuddy — Desktop</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -62,7 +62,7 @@
 <body>
   <div class="corner tl"></div><div class="corner tr"></div>
   <div class="corner bl"></div><div class="corner br"></div>
-  <h1>JARVIS</h1>
+  <h1>THINKINBUDDY</h1>
   <div class="sub">DESKTOP — CLYDE DIRECT</div>
   <div class="orb" id="orb">🎙️</div>
   <div class="status" id="status">TAP TO START</div>
@@ -70,7 +70,7 @@
   <div class="hint">TAP = START / STOP SESSION &nbsp;|&nbsp; TAP WHILE SPEAKING = INTERRUPT</div>
 
   <script>
-    const API = 'https://jarvis-troy.vercel.app/api/chat';
+    const API = 'https://thinkinbuddy.vercel.app/api/chat';
 
     const orb    = document.getElementById('orb');
     const status = document.getElementById('status');
@@ -121,7 +121,7 @@
       if (v) u.voice = v;
 
       speaking = true;
-      setState('talk', 'JARVIS SPEAKING');
+      setState('talk', 'THINKINBUDDY SPEAKING');
 
       // Stop mic BEFORE speaking to kill feedback loop
       try { rec.stop(); } catch (_) {}

@@ -92,7 +92,7 @@ export default async function handler(req, res) {
   //
   // CORS is NOT authentication (see lib/security.js header): a non-browser
   // client sends no Origin at all and sails past the check above. Proven live
-  // against /api/chat, where `curl -H 'Origin: https://jarvis-troy.vercel.app'`
+  // against /api/chat, where `curl -H 'Origin: https://thinkinbuddy.vercel.app'`
   // turned a 403 into a 400. The secret is the gate; the origin check is not.
   if (!requireWebhookSecret(req, res)) return;
 

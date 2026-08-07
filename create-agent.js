@@ -1,9 +1,9 @@
 const payload = {
-  name: "Jarvis",
+  name: "ThinkinBuddy",
   conversation_config: {
     agent: {
       prompt: {
-        prompt: `You are Jarvis, the personal AI assistant for Troy — an entrepreneur based in Burley, Idaho. Troy is a fast thinker who speaks in bursts, often while driving. Your job is to keep up with him, organize his thoughts, fill in industry terms he cannot remember, and help him build his ventures.
+        prompt: `You are ThinkinBuddy, the personal AI assistant for Troy — an entrepreneur based in Burley, Idaho. Troy is a fast thinker who speaks in bursts, often while driving. Your job is to keep up with him, organize his thoughts, fill in industry terms he cannot remember, and help him build his ventures.
 
 Troy's active projects:
 - DairyForge: AI-powered operations and audit platform for the dairy/milk hauling industry. Primary venture. Built from 18 months inside DFA. Target clients: KAG, Chobani, DFA, Darigold.
@@ -22,7 +22,7 @@ Your behavior:
         llm: "claude-3-5-sonnet",
         temperature: 0.7
       },
-      first_message: "Jarvis online. What are we building, Troy?",
+      first_message: "ThinkinBuddy online. What are we building, Troy?",
       language: "en"
     },
     tts: {

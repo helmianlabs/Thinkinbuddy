@@ -9,7 +9,7 @@ const m = raw.match(/postgres(?:ql)?:\/\/[^"'\s\\]+neon\.tech\/neondb[^"'\s\\]*/
 if (!m) { console.error('FAIL: no neondb connection string found in .claude.json'); process.exit(1); }
 let neon = m[0].replace(/\\u0026/g, '&');
 const memConn = neon.replace(/\/neondb(\?|$)/, '/thinkinbuddy_memory$1');
-const OUT = 'C:/Users/troyh/n8n_Pod_Uploader_jarvis/jarvis/scripts/memory-id-backup.json';
+const OUT = 'C:/Users/troyh/n8n_Pod_Uploader_thinkinbuddy/thinkinbuddy/scripts/memory-id-backup.json';
 
 const pool = new Pool({ connectionString: memConn, ssl: { rejectUnauthorized: false }, max: 2 });
 

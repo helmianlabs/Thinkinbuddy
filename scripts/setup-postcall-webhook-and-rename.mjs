@@ -1,6 +1,6 @@
 // scripts/setup-postcall-webhook-and-rename.mjs
 // ---------------------------------------------------------------------------
-// 1. Renames the agent from "Jarvis" (leftover from the original bootstrap
+// 1. Renames the agent from "ThinkinBuddy" (leftover from the original bootstrap
 //    script, create-agent.js) to "ThinkinBuddy", matching the app's actual
 //    branding everywhere else.
 // 2. Creates a workspace webhook (POST /v1/workspace/webhooks) pointing at
@@ -21,7 +21,7 @@ for (const line of readFileSync(new URL('../.env.local', import.meta.url), 'utf8
 }
 
 const AGENT_ID = 'agent_4401kqcb0w2dey28c69zhchv7ayn';
-const WEBHOOK_URL = 'https://jarvis-troy.vercel.app/api/conversation-webhook';
+const WEBHOOK_URL = 'https://thinkinbuddy.vercel.app/api/conversation-webhook';
 const KEY = process.env.ELEVENLABS_API_KEY;
 if (!KEY) { console.error('ELEVENLABS_API_KEY not set'); process.exit(1); }
 
@@ -35,7 +35,7 @@ async function api(path, opts = {}) {
 }
 
 (async () => {
-  console.log('[1/4] Renaming agent Jarvis -> ThinkinBuddy...');
+  console.log('[1/4] Renaming agent ThinkinBuddy -> ThinkinBuddy...');
   const before = await api(`/convai/agents/${AGENT_ID}`);
   console.log(`      was: "${before.name}"`);
   await api(`/convai/agents/${AGENT_ID}`, { method: 'PATCH', body: JSON.stringify({ name: 'ThinkinBuddy' }) });

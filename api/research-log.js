@@ -78,7 +78,7 @@ function formatAsMarkdown(conversation, userContext) {
   md += `# Session ${date.slice(0, 10)}\n\n`;
 
   for (const msg of conversation) {
-    const role = msg.role === 'user' ? 'PARTICIPANT' : 'JARVIS';
+    const role = msg.role === 'user' ? 'PARTICIPANT' : 'THINKINBUDDY';
     md += `## ${role}\n${msg.content}\n\n`;
   }
 

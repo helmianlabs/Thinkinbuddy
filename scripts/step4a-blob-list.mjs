@@ -4,7 +4,7 @@
 import { readFileSync } from 'fs';
 
 function envVal(key) {
-  const e = readFileSync('C:/Users/troyh/n8n_Pod_Uploader_jarvis/jarvis/.env.production.local', 'utf8');
+  const e = readFileSync('C:/Users/troyh/n8n_Pod_Uploader_thinkinbuddy/thinkinbuddy/.env.production.local', 'utf8');
   for (const line of e.split(/\r?\n/)) {
     const i = line.indexOf('=');
     if (i > 0 && line.slice(0, i).trim() === key) return line.slice(i + 1).trim().replace(/^["']|["']$/g, '');

@@ -9,7 +9,7 @@ const m = claude.match(/postgres(?:ql)?:\/\/[^"'\s\\]+neon\.tech\/neondb[^"'\s\\
 if (!m) { console.error('no neondb conn'); process.exit(1); }
 process.env.DATABASE_URL_MEMORY = m[0].replace(/\\u0026/g, '&').replace(/\/neondb(\?|$)/, '/thinkinbuddy_memory$1');
 
-const envl = readFileSync('C:/Users/troyh/n8n_Pod_Uploader_jarvis/jarvis/.env.local', 'utf8');
+const envl = readFileSync('C:/Users/troyh/n8n_Pod_Uploader_thinkinbuddy/thinkinbuddy/.env.local', 'utf8');
 const ok = envl.match(/^OPENAI_API_KEY\s*=\s*(.+)$/m);
 if (ok) process.env.OPENAI_API_KEY = ok[1].trim().replace(/^["']|["']$/g, '');
 

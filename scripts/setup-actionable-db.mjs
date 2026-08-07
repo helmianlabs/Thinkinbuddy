@@ -9,7 +9,7 @@
 // It shares the memory database (DATABASE_URL_MEMORY) but uses its OWN tables.
 // memory_items is neither read nor written here.
 //
-// USAGE (from jarvis/):
+// USAGE (from thinkinbuddy/):
 //   node scripts/setup-actionable-db.mjs "postgresql://USER:PASS@HOST/db?sslmode=require"
 // or, with the env var already set:
 //   node scripts/setup-actionable-db.mjs

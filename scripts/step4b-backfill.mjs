@@ -6,7 +6,7 @@
 import { Pool } from 'pg';
 import { readFileSync } from 'fs';
 
-function envVal(key, file = 'C:/Users/troyh/n8n_Pod_Uploader_jarvis/jarvis/.env.production.local') {
+function envVal(key, file = 'C:/Users/troyh/n8n_Pod_Uploader_thinkinbuddy/thinkinbuddy/.env.production.local') {
   const e = readFileSync(file, 'utf8');
   for (const line of e.split(/\r?\n/)) {
     const i = line.indexOf('=');
@@ -19,7 +19,7 @@ const TOKEN = envVal('BLOB_READ_WRITE_TOKEN');
 // OPENAI_API_KEY is EMPTY in .env.production.local — the real key lives in .env.local.
 // Try production.local first, then fall back to .env.local. (Verified 2026-06-09.)
 const OPENAI_KEY = envVal('OPENAI_API_KEY')
-  || envVal('OPENAI_API_KEY', 'C:/Users/troyh/n8n_Pod_Uploader_jarvis/jarvis/.env.local');
+  || envVal('OPENAI_API_KEY', 'C:/Users/troyh/n8n_Pod_Uploader_thinkinbuddy/thinkinbuddy/.env.local');
 if (!TOKEN) { console.error('FAIL: no BLOB_READ_WRITE_TOKEN'); process.exit(1); }
 if (!OPENAI_KEY) { console.error('FAIL: no OPENAI_API_KEY in production.local or .env.local'); process.exit(1); }
 

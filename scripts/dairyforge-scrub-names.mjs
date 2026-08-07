@@ -210,7 +210,7 @@ const FAKE_EMAIL = "alex.rivera@demo-tenant.example";
         if (v.rows[0].n > 0) throw new Error(`VERIFY FAILED: ${label} still has ${v.rows[0].n} real-token rows`);
       }
       const ts = new Date(parseInt(process.env.TS || '0', 10) || Date.now()).toISOString().replace(/[:.]/g, '-');
-      writeFileSync(`C:/Users/troyh/n8n_Pod_Uploader_jarvis/jarvis/scripts/dairyforge-scrub-backup-${ts}.json`,
+      writeFileSync(`C:/Users/troyh/n8n_Pod_Uploader_thinkinbuddy/thinkinbuddy/scripts/dairyforge-scrub-backup-${ts}.json`,
         JSON.stringify(backup, null, 2));
       await client.query('COMMIT');
       console.log('\nVERIFY PASSED. COMMITTED. Backup written.');

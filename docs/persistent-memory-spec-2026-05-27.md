@@ -3,7 +3,7 @@
 
 ## TL;DR
 
-We are building a durable cross-session memory store for the Thinking Buddy / Jarvis voice agent so it stops forgetting Troy between conversations. Five memory layers (session, rolling summary, semantic, project, task) backed by one Postgres table with pgvector embeddings, retrieved by cosine similarity (not keywords), injected as a compact card into the system prompt, and refreshed via post-session LLM extraction with PII filtering and semantic dedup. **The critical change vs. ChatGPT's original proposal: vector-first retrieval is built in from day one — not bolted on later — because keyword scoring will fail the moment Troy phrases the same thing two different ways.**
+We are building a durable cross-session memory store for the Thinking Buddy / ThinkinBuddy voice agent so it stops forgetting Troy between conversations. Five memory layers (session, rolling summary, semantic, project, task) backed by one Postgres table with pgvector embeddings, retrieved by cosine similarity (not keywords), injected as a compact card into the system prompt, and refreshed via post-session LLM extraction with PII filtering and semantic dedup. **The critical change vs. ChatGPT's original proposal: vector-first retrieval is built in from day one — not bolted on later — because keyword scoring will fail the moment Troy phrases the same thing two different ways.**
 
 ## 5-layer memory model
 
@@ -12,7 +12,7 @@ We are building a durable cross-session memory store for the Thinking Buddy / Ja
 | **Session** | Raw transcript of the current conversation, in-memory only | Every turn of the live call — feeds the model's context window directly |
 | **Rolling summary** | LLM-compressed recap of the last N turns when the window gets tight | Mid-session when transcript exceeds a token threshold (~6k); replaces older turns |
 | **Semantic** | Durable facts, preferences, identities, decisions — Postgres `memory_items` rows | Boot of every new session + on-demand retrieval mid-session when query embedding has neighbors |
-| **Project** | Same table, scoped to a project_id (DairyForge, Faith & Light, Jarvis itself, consulting) | When the agent detects or is told the active project, retrieval filters by scope |
+| **Project** | Same table, scoped to a project_id (DairyForge, Faith & Light, ThinkinBuddy itself, consulting) | When the agent detects or is told the active project, retrieval filters by scope |
 | **Task** | Same table, scoped to a short-lived task_id with TTL | While a multi-turn task is in flight (e.g. "help me draft this pitch deck"); auto-expires |
 
 Session and rolling summary live in process memory and never touch the DB. Semantic, project, and task all share the `memory_items` table; they differ only in `scope` and `valid_until`.
@@ -588,7 +588,7 @@ Steps 1–5 give a functional system (recall works, injection works, nothing get
 | Postgres host | Reuse Railway F&L Postgres (new DB on the same cluster) | One bill, one backup story; isolate via separate DB not schema |
 | Extraction model | Claude Haiku 4.x or GPT-4o-mini, async post-session | Cheap, never blocks the live call; main agent stays on the premium model |
 | Session boundary for extraction | End of conversation only (single batch) | Mid-session extraction is wasted spend; the rolling summary covers in-session continuity |
-| Multi-device sharing | One memory pool per `user_id` across all devices | Troy on phone + cab + desktop → same Jarvis brain; confirm before building |
+| Multi-device sharing | One memory pool per `user_id` across all devices | Troy on phone + cab + desktop → same ThinkinBuddy brain; confirm before building |
 
 ## What this won't do
 
@@ -596,4 +596,4 @@ This is not a planner, not a task executor, not an agentic loop. It does not dec
 
 ## Mem0 / Letta comparison
 
-This design is broadly equivalent to what Mem0 and Letta provide out of the box — pgvector-backed memory with scopes, importance scoring, post-session extraction, dedup, and a user review surface. Forking Mem0 buys ~70% of this for free at the cost of inheriting their abstractions, their roadmap, and their assumptions about how the agent loop is shaped; rolling our own is more code now but means every layer — extraction prompt, dedup threshold, PII filter, retrieval ranking, card format — is tunable to a single user (Troy) and a single agent loop (ElevenLabs voice). For a personal voice agent where the owner wants full control of every behavior and where the data volume is one user's lifetime of conversations (not millions of tenants), roll-your-own wins. Revisit if/when Jarvis becomes multi-tenant.
+This design is broadly equivalent to what Mem0 and Letta provide out of the box — pgvector-backed memory with scopes, importance scoring, post-session extraction, dedup, and a user review surface. Forking Mem0 buys ~70% of this for free at the cost of inheriting their abstractions, their roadmap, and their assumptions about how the agent loop is shaped; rolling our own is more code now but means every layer — extraction prompt, dedup threshold, PII filter, retrieval ranking, card format — is tunable to a single user (Troy) and a single agent loop (ElevenLabs voice). For a personal voice agent where the owner wants full control of every behavior and where the data volume is one user's lifetime of conversations (not millions of tenants), roll-your-own wins. Revisit if/when ThinkinBuddy becomes multi-tenant.
