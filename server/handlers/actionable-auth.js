@@ -12,8 +12,8 @@
 
 import {
   buildAuthUrl, googleStatus, disconnectGoogle, isGoogleConfigured, SCOPES,
-} from '../lib/actionable/google-auth.js';
-import { cors, requireAuth, readQuery } from '../lib/actionable/http.js';
+} from '../../lib/actionable/google-auth.js';
+import { cors, requireAuth, readQuery } from '../../lib/actionable/http.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;

@@ -6,8 +6,8 @@
 // Body: { prompt, userId?, aspect? = 'portrait' | 'square' | 'landscape', seconds? = 5 }
 
 import { put } from '@vercel/blob';
-import { requireWebhookSecret } from '../lib/security.js';
-import { isAllowed, SAFE_REFUSAL } from '../lib/moderation.js';
+import { requireWebhookSecret } from '../../lib/security.js';
+import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
 
 // Runway model variant.
 //

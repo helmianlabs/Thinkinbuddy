@@ -9,8 +9,8 @@
 // uses so the widget's media poller can show it the same way.
 
 import { put } from '@vercel/blob';
-import { requireWebhookSecret } from '../lib/security.js';
-import { isAllowed, SAFE_REFUSAL } from '../lib/moderation.js';
+import { requireWebhookSecret } from '../../lib/security.js';
+import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
 
 const MODEL = 'sora-2';
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;

@@ -16,9 +16,9 @@
 import {
   listProjects, upsertProject, archiveProject,
   getSettings, saveSettings, ensureSeedProjects, listKnownTags,
-} from '../lib/actionable/db.js';
-import { googleStatus, isGoogleConfigured } from '../lib/actionable/google-auth.js';
-import { cors, requireAuth, readQuery } from '../lib/actionable/http.js';
+} from '../../lib/actionable/db.js';
+import { googleStatus, isGoogleConfigured } from '../../lib/actionable/google-auth.js';
+import { cors, requireAuth, readQuery } from '../../lib/actionable/http.js';
 
 const SETTABLE = ['timezone', 'sheets_webhook', 'docs_webhook', 'sheet_id', 'numeric_threshold', 'doc_folder_id'];
 

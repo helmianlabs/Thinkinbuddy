@@ -9,7 +9,7 @@
 // ElevenLabs' full payload: the picker needs nothing else, and the response
 // is public to anyone with the app open.
 
-import { resolveKey, missingKeyError } from '../lib/userKeys.js';
+import { resolveKey, missingKeyError } from '../../lib/userKeys.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');

@@ -7,8 +7,8 @@
 // Body: { prompt, userId?, aspect? = 'portrait' | 'square' | 'landscape', quality? = 'fast' | 'dev' | 'pro' }
 
 import { put } from '@vercel/blob';
-import { requireWebhookSecret } from '../lib/security.js';
-import { isAllowed, SAFE_REFUSAL } from '../lib/moderation.js';
+import { requireWebhookSecret } from '../../lib/security.js';
+import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
 
 // Replicate model slugs for the three FLUX tiers.
 // Mark's voice spec 2026-06-02: pro = flux-2-pro (latest). Keeping schnell/dev

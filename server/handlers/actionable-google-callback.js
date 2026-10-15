@@ -10,7 +10,7 @@
 // in a browser, having just tapped a button in the app.
 // ---------------------------------------------------------------------------
 
-import { exchangeCode, saveGoogleAccount, readState } from '../lib/actionable/google-auth.js';
+import { exchangeCode, saveGoogleAccount, readState } from '../../lib/actionable/google-auth.js';
 
 export default async function handler(req, res) {
   const { code, error, state } = req.query || {};

@@ -12,9 +12,9 @@
 //   https://thinkinbuddy.vercel.app/api/actionable-oauth-callback
 // ---------------------------------------------------------------------------
 
-import { readStateFull } from '../lib/actionable/google-auth.js';
-import { getProvider } from '../lib/actionable/integrations/registry.js';
-import { saveConnection } from '../lib/actionable/integrations/store.js';
+import { readStateFull } from '../../lib/actionable/google-auth.js';
+import { getProvider } from '../../lib/actionable/integrations/registry.js';
+import { saveConnection } from '../../lib/actionable/integrations/store.js';
 
 export default async function handler(req, res) {
   const { code, error, state, error_description } = req.query || {};

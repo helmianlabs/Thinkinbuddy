@@ -27,7 +27,7 @@
 // every request (fail-closed) rather than accepting unverified writes.
 
 import crypto from 'node:crypto';
-import { getPool } from './memory.js';
+import { getPool } from '../server/handlers/memory.js';
 
 export const config = { api: { bodyParser: false } };
 

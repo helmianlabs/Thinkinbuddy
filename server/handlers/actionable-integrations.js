@@ -12,13 +12,13 @@
 // browser and polls this route until `connected` flips true.
 // ---------------------------------------------------------------------------
 
-import { listProviders, getProvider } from '../lib/actionable/integrations/registry.js';
+import { listProviders, getProvider } from '../../lib/actionable/integrations/registry.js';
 import {
   listConnections, saveUrlConnection, deleteConnection, getUsableConnection,
-} from '../lib/actionable/integrations/store.js';
-import { makeState, googleStatus, disconnectGoogle } from '../lib/actionable/google-auth.js';
-import { getEntry, listProjects, getSettings } from '../lib/actionable/db.js';
-import { cors, requireAuth, readQuery } from '../lib/actionable/http.js';
+} from '../../lib/actionable/integrations/store.js';
+import { makeState, googleStatus, disconnectGoogle } from '../../lib/actionable/google-auth.js';
+import { getEntry, listProjects, getSettings } from '../../lib/actionable/db.js';
+import { cors, requireAuth, readQuery } from '../../lib/actionable/http.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;

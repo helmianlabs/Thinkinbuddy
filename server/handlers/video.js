@@ -14,9 +14,9 @@
 // If promptImage is supplied we skip step 1 and animate that image directly.
 
 import { put } from '@vercel/blob';
-import { requireWebhookSecret } from '../lib/security.js';
-import { isAllowed, SAFE_REFUSAL } from '../lib/moderation.js';
-import { saveMediaMemory } from '../lib/mediaMemory.js';
+import { requireWebhookSecret } from '../../lib/security.js';
+import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
+import { saveMediaMemory } from '../../lib/mediaMemory.js';
 
 export const config = { maxDuration: 300 };
 

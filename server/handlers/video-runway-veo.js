@@ -10,8 +10,8 @@
 // in ElevenLabs makes this explicit so the agent sets expectations up-front.
 
 import { put } from '@vercel/blob';
-import { requireWebhookSecret } from '../lib/security.js';
-import { saveMediaMemory } from '../lib/mediaMemory.js';
+import { requireWebhookSecret } from '../../lib/security.js';
+import { saveMediaMemory } from '../../lib/mediaMemory.js';
 
 const RUNWAY_BASE = 'https://api.dev.runwayml.com/v1';
 const RUNWAY_VERSION = '2024-11-06';

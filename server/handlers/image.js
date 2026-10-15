@@ -7,9 +7,9 @@
 // instances (replaces the broken in-memory global).
 
 import { put } from '@vercel/blob';
-import { requireWebhookSecret } from '../lib/security.js';
-import { isAllowed, SAFE_REFUSAL } from '../lib/moderation.js';
-import { saveMediaMemory } from '../lib/mediaMemory.js';
+import { requireWebhookSecret } from '../../lib/security.js';
+import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
+import { saveMediaMemory } from '../../lib/mediaMemory.js';
 
 const MODEL = 'gpt-image-2';
 const blobPrefix = (userId) => `thinkinbuddy/images/${userId}/`;

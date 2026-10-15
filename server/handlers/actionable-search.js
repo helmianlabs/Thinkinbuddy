@@ -12,8 +12,8 @@
 // is what he will actually type into the box.
 // ---------------------------------------------------------------------------
 
-import { searchEntries, getEntry, listOpenItems, setItemDone, listProjects, listKnownTags } from '../lib/actionable/db.js';
-import { cors, requireAuth, readQuery } from '../lib/actionable/http.js';
+import { searchEntries, getEntry, listOpenItems, setItemDone, listProjects, listKnownTags } from '../../lib/actionable/db.js';
+import { cors, requireAuth, readQuery } from '../../lib/actionable/http.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;

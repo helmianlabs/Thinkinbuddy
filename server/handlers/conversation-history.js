@@ -51,7 +51,7 @@
 // so an export can tell a reconciled transcript from a live-only one.
 
 import { getPool } from './memory.js';
-import { requireWebhookSecret } from '../lib/security.js';
+import { requireWebhookSecret } from '../../lib/security.js';
 
 const MAX_LIMIT = 100;
 

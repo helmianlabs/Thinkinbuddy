@@ -26,18 +26,18 @@
 
 export const config = { api: { bodyParser: { sizeLimit: '25mb' } } };
 
-import { transcribeAudio, extractEntry, searchableText, isVisionMime } from '../lib/actionable/extract.js';
+import { transcribeAudio, extractEntry, searchableText, isVisionMime } from '../../lib/actionable/extract.js';
 import {
   listProjects, ensureSeedProjects, listKnownTags, listKnownPeople,
   getSettings, saveEntry, attachOutputs,
-} from '../lib/actionable/db.js';
+} from '../../lib/actionable/db.js';
 import {
   writeGoogleDoc, writeDocViaWebhook, shouldAlsoLogToSheet,
   appendToSheet, appendToSheetWebhook,
-} from '../lib/actionable/docs.js';
-import { googleStatus } from '../lib/actionable/google-auth.js';
-import { requireAuth, cors } from '../lib/actionable/http.js';
-import { resolveChain } from '../lib/actionable/providers.js';
+} from '../../lib/actionable/docs.js';
+import { googleStatus } from '../../lib/actionable/google-auth.js';
+import { requireAuth, cors } from '../../lib/actionable/http.js';
+import { resolveChain } from '../../lib/actionable/providers.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;

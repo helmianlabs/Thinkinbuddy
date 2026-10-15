@@ -1,4 +1,4 @@
-import { resolveKey, missingKeyError } from '../lib/userKeys.js';
+import { resolveKey, missingKeyError } from '../../lib/userKeys.js';
 
 // Fallback voice, used when the caller names none. Unchanged from the
 // original hardcoded value so existing callers keep the same voice.

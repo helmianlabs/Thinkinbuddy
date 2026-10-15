@@ -35,7 +35,7 @@
 //   restricts *browser* origins — it is NOT authentication.
 
 import { getPool } from './memory.js';
-import { applyBrowserCors, requireWebhookSecret } from '../lib/security.js';
+import { applyBrowserCors, requireWebhookSecret } from '../../lib/security.js';
 
 // Columns safe to return to the client (everything except the raw embedding,
 // which is large and useless to a human reviewer).

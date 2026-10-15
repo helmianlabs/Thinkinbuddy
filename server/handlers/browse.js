@@ -10,9 +10,9 @@
 // Kid-safe: refuses adult/unsafe domains (Layer 3 denylist) up front, and
 // moderates the fetched page's main text (Layer 2) before returning it.
 
-import { isSafeUrl, UNSAFE_SITE_MSG } from '../lib/safeBrowse.js';
-import { isAllowed } from '../lib/moderation.js';
-import { requireToolAuth } from '../lib/security.js';
+import { isSafeUrl, UNSAFE_SITE_MSG } from '../../lib/safeBrowse.js';
+import { isAllowed } from '../../lib/moderation.js';
+import { requireToolAuth } from '../../lib/security.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

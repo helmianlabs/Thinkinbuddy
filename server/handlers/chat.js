@@ -4,9 +4,9 @@
 // This path is text-only (no ElevenLabs voice, no real webhook tools), so
 // we expose the [ACTION:*] tag protocol instead of the tool block.
 
-import { buildSystemPrompt } from '../lib/personality.js';
-import { applyBrowserCors, requireBrowserFetch } from '../lib/security.js';
-import { isAllowed } from '../lib/moderation.js';
+import { buildSystemPrompt } from '../../lib/personality.js';
+import { applyBrowserCors, requireBrowserFetch } from '../../lib/security.js';
+import { isAllowed } from '../../lib/moderation.js';
 
 // Payload ceilings. A single request cannot be made expensive: input tokens are
 // what cost money here (max_tokens caps only the OUTPUT at 400), so an

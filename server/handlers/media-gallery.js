@@ -16,8 +16,8 @@
 // The front-end gallery panel polls this with no query on load; it also calls it
 // with a query when the user asks Mark to recall a specific image/video.
 
-import { applyBrowserCors } from '../lib/security.js';
-import { retrieveMedia } from '../lib/mediaMemory.js';
+import { applyBrowserCors } from '../../lib/security.js';
+import { retrieveMedia } from '../../lib/mediaMemory.js';
 
 export default async function handler(req, res) {
   applyBrowserCors(req, res);

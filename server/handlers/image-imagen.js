@@ -7,8 +7,8 @@
 // Body: { prompt, userId?, aspect? = 'portrait' | 'square' | 'landscape' }
 
 import { put } from '@vercel/blob';
-import { requireWebhookSecret } from '../lib/security.js';
-import { isAllowed, SAFE_REFUSAL } from '../lib/moderation.js';
+import { requireWebhookSecret } from '../../lib/security.js';
+import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
 
 const MODEL = 'imagen-4.0-generate-001';
 const blobPrefix = (userId) => `thinkinbuddy/images/${userId}/`;

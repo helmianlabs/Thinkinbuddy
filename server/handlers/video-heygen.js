@@ -10,7 +10,7 @@
 // Cost: ~$0.20-$0.50 per generated minute depending on plan.
 
 import { put } from '@vercel/blob';
-import { requireWebhookSecret } from '../lib/security.js';
+import { requireWebhookSecret } from '../../lib/security.js';
 
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
 

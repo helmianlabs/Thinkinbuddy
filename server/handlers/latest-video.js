@@ -10,7 +10,7 @@
 // most one download), so it always fits inside the function timeout.
 
 import { list, put, del } from '@vercel/blob';
-import { saveMediaMemory } from '../lib/mediaMemory.js';
+import { saveMediaMemory } from '../../lib/mediaMemory.js';
 
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
 

@@ -11,9 +11,9 @@
 // query through OpenAI moderation (Layer 2) before searching. Instructs the
 // model to keep results safe-search/kid-appropriate.
 
-import { isSafeQuery, UNSAFE_QUERY_MSG } from '../lib/safeBrowse.js';
-import { isAllowed } from '../lib/moderation.js';
-import { requireToolAuth } from '../lib/security.js';
+import { isSafeQuery, UNSAFE_QUERY_MSG } from '../../lib/safeBrowse.js';
+import { isAllowed } from '../../lib/moderation.js';
+import { requireToolAuth } from '../../lib/security.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

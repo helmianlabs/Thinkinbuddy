@@ -27,7 +27,7 @@
 // If that toggle is off, ElevenLabs ignores the override and falls back to the
 // agent's saved prompt. This is a required one-time manual dashboard step.
 
-import { buildSystemPrompt } from '../lib/personality.js';
+import { buildSystemPrompt } from '../../lib/personality.js';
 import { retrieveMemories } from './memory.js';
 
 export default async function handler(req, res) {
