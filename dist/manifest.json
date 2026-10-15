@@ -1,0 +1,13 @@
+{
+  "name": "ThinkinBuddy",
+  "short_name": "ThinkinBuddy",
+  "description": "Your personal AI thinking partner",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050508",
+  "theme_color": "#050508",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

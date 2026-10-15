@@ -1,0 +1,2487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#050508" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ThinkinBuddy" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <title>ThinkinBuddy</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #050508;
+      color: #e0f0ff;
+      font-family: 'Courier New', monospace;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+      pointer-events: none;
+      z-index: 1;
+    }
+    .corner { position: fixed; width: 40px; height: 40px; border-color: #00d4ff; border-style: solid; opacity: 0.3; }
+    .corner.tl { top: 20px; left: 20px; border-width: 1px 0 0 1px; }
+    .corner.tr { top: 20px; right: 20px; border-width: 1px 1px 0 0; }
+    .corner.bl { bottom: 20px; left: 20px; border-width: 0 0 1px 1px; }
+    .corner.br { bottom: 20px; right: 20px; border-width: 0 1px 1px 0; }
+    .title { font-size: clamp(1.1rem, 5vw, 1.8rem); letter-spacing: 0.18em; text-transform: uppercase; color: #00d4ff; margin-bottom: 8px; text-shadow: 0 0 20px rgba(0,212,255,0.4); z-index: 2; }
+    .subtitle { font-size: 0.65rem; letter-spacing: 0.2em; color: #4a5568; margin-bottom: 50px; z-index: 2; text-align: center; padding: 0 20px; }
+
+    .orb {
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #1a3a4a, #050508);
+      border: 1px solid rgba(0,212,255,0.2);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.3s ease;
+      box-shadow: 0 0 30px rgba(0,212,255,0.05);
+      z-index: 2;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .orb:hover { box-shadow: 0 0 40px rgba(0,212,255,0.15); }
+    .orb.listening {
+      border-color: rgba(0,212,255,0.8);
+      box-shadow: 0 0 60px rgba(0,212,255,0.3), inset 0 0 30px rgba(0,212,255,0.1);
+      animation: pulse 1.5s infinite;
+    }
+    .orb.thinking {
+      border-color: rgba(255,200,0,0.6);
+      box-shadow: 0 0 40px rgba(255,200,0,0.2);
+      animation: spin-border 1s linear infinite;
+    }
+    .orb.speaking {
+      border-color: rgba(0,255,150,0.6);
+      box-shadow: 0 0 50px rgba(0,255,150,0.2);
+      animation: pulse-green 1s infinite;
+    }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 60px rgba(0,212,255,0.3),inset 0 0 30px rgba(0,212,255,0.1)} 50%{box-shadow:0 0 80px rgba(0,212,255,0.5),inset 0 0 40px rgba(0,212,255,0.15)} }
+    @keyframes pulse-green { 0%,100%{box-shadow:0 0 50px rgba(0,255,150,0.2)} 50%{box-shadow:0 0 70px rgba(0,255,150,0.4)} }
+    @keyframes spin-border { to{transform:rotate(360deg)} }
+
+    .orb-icon { font-size: 2.5rem; pointer-events: none; }
+
+    .status {
+      margin-top: 30px;
+      font-size: 0.7rem;
+      letter-spacing: 0.15em;
+      color: #4a5568;
+      text-transform: uppercase;
+      z-index: 2;
+      min-height: 1.2em;
+    }
+    .status.active { color: #00d4ff; }
+    .status.speaking { color: #00ff96; }
+    .status.thinking { color: #ffc800; }
+
+    .transcript {
+      margin-top: 20px;
+      max-width: 320px;
+      text-align: center;
+      font-size: 0.8rem;
+      color: #6b7280;
+      line-height: 1.6;
+      z-index: 2;
+      min-height: 3em;
+      padding: 0 20px;
+    }
+
+    /* ─── Onboarding overlay ─────────────────────────────────────── */
+    .onboarding {
+      position: fixed; inset: 0;
+      background: rgba(5,5,8,0.95);
+      backdrop-filter: blur(8px);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 100;
+      padding: 20px;
+      text-align: center;
+    }
+    .onboarding.hidden { display: none; }
+    .onboarding h1 {
+      font-size: 1.5rem; letter-spacing: 0.3em; color: #00d4ff;
+      margin-bottom: 12px; text-shadow: 0 0 15px rgba(0,212,255,0.4);
+    }
+    .onboarding p {
+      font-size: 0.95rem; color: #a0aec0; max-width: 380px;
+      line-height: 1.6; margin-bottom: 28px;
+    }
+    .onboarding input {
+      background: rgba(0,212,255,0.05);
+      border: 1px solid rgba(0,212,255,0.3);
+      color: #e0f0ff;
+      padding: 14px 18px;
+      font-family: 'Courier New', monospace;
+      font-size: 1rem;
+      width: 280px;
+      max-width: 90vw;
+      border-radius: 4px;
+      outline: none;
+      text-align: center;
+      letter-spacing: 0.05em;
+    }
+    .onboarding input:focus { border-color: rgba(0,212,255,0.7); box-shadow: 0 0 15px rgba(0,212,255,0.2); }
+    .onboarding button {
+      margin-top: 20px;
+      background: rgba(0,212,255,0.1);
+      border: 1px solid rgba(0,212,255,0.5);
+      color: #00d4ff;
+      padding: 12px 32px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+    }
+    .onboarding button:hover { background: rgba(0,212,255,0.2); box-shadow: 0 0 20px rgba(0,212,255,0.3); }
+    .onboarding-consent {
+      margin-top: 24px; max-width: 380px;
+      font-size: 0.7rem; color: #6b7280; line-height: 1.5;
+      display: flex; align-items: flex-start; gap: 8px; text-align: left;
+    }
+    .onboarding-consent input { width: auto; padding: 0; margin-top: 3px; flex-shrink: 0; }
+    .onboarding-consent label { cursor: pointer; }
+
+    /* ─── Top-right action buttons ─────────────────────────────────── */
+    .actions {
+      position: fixed; top: 70px; right: 20px;
+      display: flex; flex-direction: column; gap: 8px;
+      z-index: 5;
+    }
+    .actions button {
+      background: rgba(0,212,255,0.05);
+      border: 1px solid rgba(0,212,255,0.25);
+      color: #a0aec0;
+      padding: 8px 14px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 3px;
+      transition: all 0.2s ease;
+    }
+    .actions button:hover { color: #00d4ff; border-color: rgba(0,212,255,0.5); background: rgba(0,212,255,0.1); }
+
+    /* ─── Settings panel (voice picker) ─────────────────────────────── */
+    .settings-panel {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(5,5,8,0.97); backdrop-filter: blur(8px);
+      border: 1px solid rgba(0,212,255,0.4);
+      padding: 24px; border-radius: 6px;
+      z-index: 50; min-width: 320px; max-width: 90vw;
+      box-shadow: 0 0 40px rgba(0,212,255,0.2);
+    }
+    .settings-panel.hidden { display: none; }
+    .settings-panel h2 {
+      font-size: 0.9rem; letter-spacing: 0.3em; color: #00d4ff;
+      margin-bottom: 16px; text-transform: uppercase;
+    }
+    .settings-panel label {
+      display: block; font-size: 0.65rem; letter-spacing: 0.1em;
+      color: #a0aec0; text-transform: uppercase; margin-bottom: 6px;
+    }
+    .settings-panel select {
+      width: 100%; padding: 10px;
+      background: rgba(0,212,255,0.05); border: 1px solid rgba(0,212,255,0.3);
+      color: #e0f0ff; font-family: 'Courier New', monospace; font-size: 0.85rem;
+      border-radius: 3px; outline: none; margin-bottom: 18px;
+    }
+    .settings-panel .row { display: flex; gap: 8px; justify-content: flex-end; }
+    .settings-panel button {
+      background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.4);
+      color: #00d4ff; padding: 8px 16px; font-family: 'Courier New', monospace;
+      font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase;
+      cursor: pointer; border-radius: 3px;
+    }
+    .settings-panel button.secondary { color: #6b7280; border-color: rgba(107,114,128,0.4); background: transparent; }
+    .settings-panel .test-line { font-size: 0.7rem; color: #6b7280; margin-bottom: 12px; }
+
+    /* ─── Settings pill (bottom-left, deliberately clear of the ──────
+       ElevenLabs widget which mounts bottom-right, and clear of the
+       .actions stack top-right). Small and quiet until hovered.     */
+    .settings-pill {
+      position: fixed; bottom: 18px; left: 18px;
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(5,5,8,0.85);
+      border: 1px solid rgba(0,212,255,0.22);
+      color: #6b7280;
+      padding: 7px 13px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.62rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 999px;
+      z-index: 6;
+      opacity: 0.55;
+      transition: opacity 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+    .settings-pill:hover { opacity: 1; color: #00d4ff; border-color: rgba(0,212,255,0.55); }
+    .settings-pill .pill-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #6b7280; transition: background 0.2s ease;
+    }
+    /* Lit only when at least one key is stored on this device. */
+    .settings-pill.configured .pill-dot { background: #00d4ff; box-shadow: 0 0 6px #00d4ff; }
+
+    /* ─── Config panel (tabs: Keys / Voice / Audio) ─────────────────── */
+    .settings-panel.config { min-width: 400px; max-width: min(94vw, 520px); }
+    .settings-panel .tabs {
+      display: flex; gap: 4px; margin-bottom: 18px;
+      border-bottom: 1px solid rgba(0,212,255,0.15);
+    }
+    .settings-panel .tabs button {
+      flex: 1; background: transparent; border: none;
+      border-bottom: 2px solid transparent;
+      color: #6b7280; padding: 8px 4px; border-radius: 0;
+      font-size: 0.62rem; letter-spacing: 0.12em;
+    }
+    .settings-panel .tabs button.active { color: #00d4ff; border-bottom-color: #00d4ff; }
+    .settings-panel .tab-body { max-height: 52vh; overflow-y: auto; margin-bottom: 16px; }
+    .settings-panel .tab-body::-webkit-scrollbar { width: 6px; }
+    .settings-panel .tab-body::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.25); border-radius: 3px; }
+    .settings-panel .tab-pane { display: none; }
+    .settings-panel .tab-pane.active { display: block; }
+
+    .settings-panel input[type="password"],
+    .settings-panel input[type="text"] {
+      width: 100%; padding: 9px 10px; box-sizing: border-box;
+      background: rgba(0,212,255,0.05); border: 1px solid rgba(0,212,255,0.3);
+      color: #e0f0ff; font-family: 'Courier New', monospace; font-size: 0.8rem;
+      border-radius: 3px; outline: none; margin-bottom: 4px;
+    }
+    .settings-panel input:focus { border-color: rgba(0,212,255,0.7); }
+    .key-field { margin-bottom: 14px; }
+    .key-field .key-head {
+      display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;
+    }
+    .key-field .key-used {
+      font-size: 0.55rem; color: #4b5563; letter-spacing: 0.06em;
+      text-transform: none; font-family: 'Courier New', monospace;
+    }
+    .key-field .key-row { display: flex; gap: 6px; align-items: stretch; }
+    .key-field .key-row input { margin-bottom: 0; }
+    .key-field .key-clear {
+      background: transparent; border: 1px solid rgba(107,114,128,0.35);
+      color: #6b7280; padding: 0 10px; font-size: 0.6rem; border-radius: 3px;
+      cursor: pointer; flex: 0 0 auto; letter-spacing: 0.08em;
+    }
+    .key-field .key-clear:hover { color: #ff6b6b; border-color: rgba(255,107,107,0.5); }
+    .key-field .key-stored { font-size: 0.58rem; color: #00d4ff; margin-top: 4px; letter-spacing: 0.05em; text-transform: none; }
+
+    .storage-note {
+      font-size: 0.6rem; color: #6b7280; line-height: 1.55;
+      background: rgba(0,212,255,0.04); border-left: 2px solid rgba(0,212,255,0.35);
+      padding: 9px 11px; margin-bottom: 16px; text-transform: none;
+      letter-spacing: 0.02em; font-family: 'Courier New', monospace;
+    }
+    .storage-note strong { color: #00d4ff; font-weight: normal; }
+
+    .toggle-row {
+      display: flex; align-items: flex-start; gap: 9px;
+      margin-bottom: 14px; cursor: pointer;
+    }
+    .toggle-row input[type="checkbox"] { margin: 2px 0 0 0; accent-color: #00d4ff; flex: 0 0 auto; }
+    .toggle-row .toggle-text { font-size: 0.65rem; color: #a0aec0; text-transform: none; letter-spacing: 0.03em; line-height: 1.5; }
+    .toggle-row .toggle-text small { display: block; color: #6b7280; font-size: 0.58rem; margin-top: 3px; }
+
+    /* ─── Export dropdown menu ──────────────────────────────────────── */
+    .export-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      right: 0;
+      background: rgba(5,5,8,0.98);
+      border: 1px solid rgba(0,212,255,0.4);
+      border-radius: 4px;
+      min-width: 160px;
+      box-shadow: 0 4px 24px rgba(0,212,255,0.15);
+      z-index: 20;
+      overflow: hidden;
+    }
+    .export-menu.hidden { display: none; }
+    .export-menu button {
+      display: block; width: 100%;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid rgba(0,212,255,0.1);
+      color: #a0aec0;
+      padding: 10px 14px;
+      text-align: left;
+      font-family: 'Courier New', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border-radius: 0;
+    }
+    .export-menu button:last-child { border-bottom: none; }
+    .export-menu button:hover { color: #00d4ff; background: rgba(0,212,255,0.08); }
+    #exportWrapper { position: relative; }
+
+    /* ─── Print / PDF stylesheet ─────────────────────────────────────── */
+    @media print {
+      body { background: #fff !important; color: #111 !important; display: block !important; height: auto !important; overflow: auto !important; font-family: Georgia, serif !important; padding: 20px !important; }
+      .corner, .actions, .settings-panel, .settings-pill, .onboarding, .orb, .status, .transcript, .footer-note, elevenlabs-convai, #widget-mount, #mediaArea, body::before { display: none !important; }
+      #printOutput { display: block !important; }
+      .print-msg { margin-bottom: 14px; }
+      .print-msg .print-role { font-weight: bold; font-size: 0.85rem; margin-bottom: 3px; }
+      .print-msg .print-text { font-size: 0.95rem; line-height: 1.6; white-space: pre-wrap; }
+      .print-header { font-size: 1.1rem; font-weight: bold; margin-bottom: 20px; border-bottom: 1px solid #ccc; padding-bottom: 8px; }
+    }
+
+    /* ─── Footer notice ─────────────────────────────────────────────── */
+    .footer-note {
+      position: fixed; bottom: 50px; left: 0; right: 0;
+      text-align: center;
+      font-size: 0.55rem; color: #4a5568;
+      letter-spacing: 0.05em; padding: 0 30px;
+      z-index: 2;
+    }
+    .footer-note a { color: #6b7280; text-decoration: underline; cursor: pointer; }
+    .footer-note a:hover { color: #00d4ff; }
+
+    /* ElevenLabs fallback widget — hidden when using browser voice */
+    .elevenlabs-mode elevenlabs-convai { display: block; z-index: 2; }
+    elevenlabs-convai { display: none; }
+    .elevenlabs-mode .orb, .elevenlabs-mode .status, .elevenlabs-mode .transcript { display: none; }
+
+    /* ─── Media gallery panel ───────────────────────────────────────── */
+    .gallery-panel {
+      position: fixed; inset: 0;
+      background: rgba(5,5,8,0.97);
+      backdrop-filter: blur(8px);
+      z-index: 60;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .gallery-panel.hidden { display: none; }
+    .gallery-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 20px 12px;
+      border-bottom: 1px solid rgba(0,212,255,0.15);
+      flex-shrink: 0;
+    }
+    .gallery-header h2 {
+      font-size: 0.85rem; letter-spacing: 0.3em; color: #00d4ff;
+      text-transform: uppercase;
+    }
+    .gallery-header-right { display: flex; align-items: center; gap: 10px; }
+    .gallery-search {
+      background: rgba(0,212,255,0.05);
+      border: 1px solid rgba(0,212,255,0.25);
+      color: #e0f0ff;
+      padding: 6px 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.72rem;
+      border-radius: 3px;
+      outline: none;
+      width: 180px;
+      letter-spacing: 0.04em;
+    }
+    .gallery-search:focus { border-color: rgba(0,212,255,0.6); }
+    .gallery-search::placeholder { color: #4a5568; }
+    .gallery-filter {
+      background: rgba(0,212,255,0.05);
+      border: 1px solid rgba(0,212,255,0.25);
+      color: #a0aec0;
+      padding: 6px 10px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+    .gallery-close {
+      background: transparent;
+      border: 1px solid rgba(0,212,255,0.3);
+      color: #00d4ff;
+      padding: 6px 14px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .gallery-close:hover { background: rgba(0,212,255,0.1); }
+    .gallery-grid {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+      align-content: start;
+    }
+    .gallery-empty {
+      grid-column: 1/-1;
+      color: #4a5568;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-align: center;
+      margin-top: 40px;
+    }
+    .gallery-item {
+      position: relative;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid rgba(0,212,255,0.15);
+      cursor: pointer;
+      background: rgba(0,212,255,0.03);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      aspect-ratio: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .gallery-item:hover {
+      border-color: rgba(0,212,255,0.6);
+      box-shadow: 0 0 16px rgba(0,212,255,0.2);
+    }
+    .gallery-item img,
+    .gallery-item video {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+      pointer-events: none;
+    }
+    .gallery-item-badge {
+      position: absolute; top: 4px; left: 4px;
+      background: rgba(0,0,0,0.75);
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 0.55rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #00d4ff;
+    }
+    .gallery-item-caption {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: linear-gradient(transparent, rgba(0,0,0,0.85));
+      padding: 18px 6px 5px;
+      font-size: 0.6rem;
+      color: #a0aec0;
+      line-height: 1.3;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    /* Lightbox overlay for full-size view */
+    .gallery-lightbox {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.92);
+      z-index: 70;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .gallery-lightbox.hidden { display: none; }
+    .gallery-lightbox img,
+    .gallery-lightbox video {
+      max-width: min(90vw, 900px);
+      max-height: 75vh;
+      border-radius: 8px;
+      border: 1px solid rgba(0,212,255,0.3);
+      object-fit: contain;
+    }
+    .gallery-lightbox-caption {
+      margin-top: 12px;
+      font-size: 0.75rem;
+      color: #a0aec0;
+      text-align: center;
+      max-width: 600px;
+      line-height: 1.5;
+    }
+    .gallery-lightbox-close {
+      position: absolute; top: 18px; right: 20px;
+      background: rgba(0,0,0,0.7);
+      border: 1px solid rgba(0,212,255,0.4);
+      color: #00d4ff;
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <!-- Onboarding overlay (shown on first visit) -->
+  <div class="onboarding hidden" id="onboarding">
+    <h1>THINKINBUDDY</h1>
+    <p>Your personal thinking partner. Brain dump, problem-solve, or just talk it out.</p>
+    <p style="margin-bottom:12px;">What should I call you?</p>
+    <input type="text" id="onboardName" placeholder="Your first name" autocomplete="off" />
+    <p style="margin-top:18px; margin-bottom:12px;">What do you want to call your buddy?</p>
+    <input type="text" id="onboardBuddyName" placeholder="ThinkinBuddy" autocomplete="off" />
+    <div class="onboarding-consent">
+      <input type="checkbox" id="onboardConsent" />
+      <label for="onboardConsent">I'm okay with anonymized conversations being saved to help improve this app. I can opt out anytime.</label>
+    </div>
+    <button id="onboardSubmit">Let's go</button>
+  </div>
+
+  <!-- Background corners + title -->
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+
+  <div class="title">THINKINBUDDY</div>
+  <div class="subtitle" id="subtitle">YOUR THINKING PARTNER</div>
+
+  <!-- Media output area — images and videos appear here -->
+  <div id="mediaArea" style="display:none; z-index:2; max-width:340px; width:90%; margin-top:20px; position:relative;">
+    <button id="mediaCloseBtn" type="button" aria-label="Dismiss media" style="position:absolute; top:-10px; right:-10px; width:32px; height:32px; border-radius:50%; border:1px solid rgba(0,212,255,0.5); background:rgba(0,0,0,0.85); color:#00d4ff; font-size:1rem; font-family:monospace; cursor:pointer; z-index:3; display:flex; align-items:center; justify-content:center; padding:0;">✕</button>
+    <img id="mediaImg" src="" alt="" style="width:100%; border-radius:12px; border:1px solid rgba(0,212,255,0.3); display:none;" />
+    <video id="mediaVideo" playsinline controls autoplay muted loop style="width:100%; border-radius:12px; border:1px solid rgba(0,212,255,0.3); display:none;"></video>
+    <div id="mediaCaption" style="color:#6b7280; font-size:0.7rem; text-align:center; margin-top:8px; font-family:monospace;"></div>
+  </div>
+
+  <!-- Top-right actions -->
+  <div class="actions">
+    <!-- Settings moved to the #settingsPill (bottom-left), off the widget. -->
+    <!-- Export button + dropdown wrapper -->
+    <div id="exportWrapper">
+      <button id="exportBtn" title="Export or share this conversation">↑ Export</button>
+      <div class="export-menu hidden" id="exportMenu">
+        <button id="exportShareBtn">📤 Share…</button>
+        <button id="exportPdfBtn">🖨 PDF / Print</button>
+        <button id="exportMdBtn">↓ Markdown (.md)</button>
+        <button id="exportTxtBtn">↓ Plain text (.txt)</button>
+        <button id="exportCopyBtn">⎘ Copy to clipboard</button>
+      </div>
+    </div>
+    <button id="galleryBtn" title="View all generated images and videos">◫ Gallery</button>
+    <button id="resetBtn" title="Sign out / new user">⟲ Reset</button>
+  </div>
+
+  <!-- ─── Media Gallery Panel ────────────────────────────────────────── -->
+  <div class="gallery-panel hidden" id="galleryPanel">
+    <div class="gallery-header">
+      <h2>Media Gallery</h2>
+      <div class="gallery-header-right">
+        <input class="gallery-search" id="gallerySearch" type="search" placeholder="Search by prompt…" autocomplete="off" />
+        <select class="gallery-filter" id="galleryFilter">
+          <option value="all">All</option>
+          <option value="image">Images</option>
+          <option value="video">Videos</option>
+        </select>
+        <button class="gallery-close" id="galleryClose">✕ Close</button>
+      </div>
+    </div>
+    <div class="gallery-grid" id="galleryGrid">
+      <div class="gallery-empty" id="galleryEmpty">No media yet — ask Mark to generate an image or video.</div>
+    </div>
+  </div>
+
+  <!-- ─── Lightbox ─────────────────────────────────────────────────── -->
+  <div class="gallery-lightbox hidden" id="galleryLightbox">
+    <button class="gallery-lightbox-close" id="galleryLightboxClose">✕</button>
+    <img id="galleryLightboxImg" src="" alt="" style="display:none;" />
+    <video id="galleryLightboxVideo" playsinline controls style="display:none;"></video>
+    <div class="gallery-lightbox-caption" id="galleryLightboxCaption"></div>
+  </div>
+
+  <!-- Hidden print container — only visible during window.print() -->
+  <div id="printOutput" style="display:none;"></div>
+
+  <!-- Settings pill — bottom-left, deliberately away from the voice widget -->
+  <button class="settings-pill" id="settingsPill" title="Keys, voice and background audio settings">
+    <span class="pill-dot"></span>Settings
+  </button>
+
+  <!-- Settings / config panel -->
+  <div class="settings-panel config hidden" id="settingsPanel">
+    <h2>Settings</h2>
+
+    <div class="tabs">
+      <button data-tab="keys"  class="active">Keys</button>
+      <button data-tab="voice">Voice</button>
+      <button data-tab="audio">Audio</button>
+    </div>
+
+    <div class="tab-body">
+      <!-- ── KEYS ─────────────────────────────────────────────────── -->
+      <div class="tab-pane active" data-pane="keys">
+        <div class="storage-note">
+          Keys are saved <strong>only in this browser's localStorage, on this
+          device</strong>. They are never written to a server, never logged, and
+          never included in analytics. Each key is sent only to this app's own
+          <strong>/api</strong> route for the provider it belongs to, over HTTPS,
+          as a request header. Clearing your browser data deletes them.
+          Leave a field blank to use the key configured on the server instead.
+        </div>
+        <div id="keyFields"></div>
+      </div>
+
+      <!-- ── VOICE ────────────────────────────────────────────────── -->
+      <div class="tab-pane" data-pane="voice">
+        <label for="elVoiceSelect">ElevenLabs voice (the talking buddy)</label>
+        <select id="elVoiceSelect"><option value="">Agent default</option></select>
+        <div class="test-line" id="elVoiceHint">
+          Applied per call as a session override. Requires "Voice" to be enabled
+          under Overrides in the ElevenLabs agent's Security tab — if it is off,
+          the agent keeps its default voice and this selection is ignored.
+        </div>
+
+        <label for="voiceSelect">Browser voice (offline / text-mode fallback)</label>
+        <select id="voiceSelect"></select>
+        <div class="test-line">Used by the free browser-speech mode, not by the ElevenLabs buddy. Tip: iPhones / iOS have better default voices than Android — try ones with "Siri", "Daniel" or "Aaron" in the name.</div>
+      </div>
+
+      <!-- ── AUDIO ────────────────────────────────────────────────── -->
+      <div class="tab-pane" data-pane="audio">
+        <div class="storage-note">
+          Keeps the conversation alive when the screen locks or you switch apps,
+          so you can pocket the phone and keep talking over Bluetooth.
+        </div>
+        <label class="toggle-row" for="bgAudioToggle">
+          <input type="checkbox" id="bgAudioToggle" checked />
+          <span class="toggle-text">Background audio (pocket mode)
+            <small>Registers a media session so the OS treats this as a music app and keeps it running when backgrounded. Shows a notification with pause/stop.</small>
+          </span>
+        </label>
+        <label class="toggle-row" for="keepAwakeToggle">
+          <input type="checkbox" id="keepAwakeToggle" />
+          <span class="toggle-text">Keep screen awake while talking
+            <small>Holds a screen wake lock during a call. Uses more battery. Off by default — pocket mode does not need it.</small>
+          </span>
+        </label>
+        <div class="test-line" id="bgAudioStatus">Status: not started.</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="secondary" id="settingsClose">Close</button>
+      <button id="settingsTest">Test</button>
+      <button id="settingsSave">Save</button>
+    </div>
+  </div>
+
+  <!-- Browser voice mode (free) -->
+  <div class="orb" id="orb">
+    <span class="orb-icon">🎙️</span>
+  </div>
+  <div class="status" id="status">TAP TO START</div>
+  <div class="transcript" id="transcript"></div>
+
+  <!-- Footer disclosure -->
+  <div class="footer-note" id="footerNote"></div>
+
+  <!-- ElevenLabs widget injected dynamically by initApp AFTER memories are loaded -->
+  <div id="widget-mount"></div>
+  <script src="https://elevenlabs.io/convai-widget/index.js" async type="text/javascript"></script>
+
+  <script>
+    // Poll for newly generated images every 3 seconds while widget is active
+    let lastImageTimestamp = 0;
+    let imagePoller = null;
+
+    function startImagePoller() {
+      if (imagePoller) return;
+      imagePoller = setInterval(async () => {
+        try {
+          // userId stays default ('anonymous') because the ElevenLabs agent
+          // tool schema doesn't pass one yet. Both sides agree on the default.
+          const res = await fetch(`/api/latest-image?since=${lastImageTimestamp}`);
+          const data = await res.json();
+          if (data.url && data.timestamp && data.timestamp > lastImageTimestamp) {
+            lastImageTimestamp = data.timestamp;
+            showMedia(data.url, data.prompt || '');
+          }
+        } catch {}
+      }, 3000);
+    }
+
+    function stopImagePoller() {
+      if (imagePoller) { clearInterval(imagePoller); imagePoller = null; }
+    }
+
+    // Poll for newly generated videos. Same cadence; separate timestamp cursor
+    // so an image render doesn't suppress a later video render and vice versa.
+    let lastVideoTimestamp = 0;
+    let videoPoller = null;
+
+    function startVideoPoller() {
+      if (videoPoller) return;
+      videoPoller = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/latest-video?since=${lastVideoTimestamp}`);
+          const data = await res.json();
+          if (data.url && data.timestamp && data.timestamp > lastVideoTimestamp) {
+            lastVideoTimestamp = data.timestamp;
+            showVideo(data.url, data.prompt || '');
+          }
+        } catch {}
+      }, 3000);
+    }
+
+    function stopVideoPoller() {
+      if (videoPoller) { clearInterval(videoPoller); videoPoller = null; }
+    }
+
+    // When call ends: fetch transcript via ElevenLabs API, extract facts with Claude, save to memory.
+    //
+    // NOTE: userId comes from currentUser.userId (the random localStorage ID
+    // generated at onboarding). Both extract-memories and prime-agent now use
+    // this real ID, so each user's memory is isolated in their own Blob prefix.
+    //
+    // REMAINING LIMITATION: The ElevenLabs save_memory tool posts to
+    // /api/memory without a userId in its body, so that path still falls back
+    // to 'troy' (server-side default in memory.js:53). Fix requires adding
+    // userId to the save_memory tool's parameter schema in the ElevenLabs
+    // agent config — out of scope for this change.
+    // TODO: plumb userId through the ElevenLabs save_memory tool params.
+    //
+    // IMPORTANT: the ElevenLabs widget bundle (elevenlabs.io/convai-widget/index.js)
+    // does NOT dispatch `elevenlabs-convai:call-ended` or `:call-started` events —
+    // the only DOM event it emits is `elevenlabs-convai:call` (pre-connect, with
+    // a mutable detail.config). The widget overrides onDisconnect on the
+    // underlying Conversation SDK, so we can't hook disconnect via config either.
+    //
+    // Workaround: inject `onConnect` into detail.config (NOT overridden by widget)
+    // to capture conversationId, then fire extract-memories on pagehide AND on a
+    // long-idle debounce after the last onMessage. extract-memories pulls the
+    // transcript from the ElevenLabs API itself, so it's safe to fire while the
+    // call is still technically open — the transcript is read-only at that point.
+    let lastConversationId = null;
+    let extractFired = false;
+    let idleTimer = null;
+    const IDLE_MS = 45000; // 45s of silence = call effectively ended
+
+    // ── CONTINUOUS TRANSCRIPT LOG (live, turn-by-turn, durable) ────────────
+    // liveSessionId is generated the INSTANT a call starts -- never blocked
+    // on capturing ElevenLabs' own conversation_id (see MEM-HB comments
+    // above on why that capture is unreliable). Each turn is posted to
+    // /api/conversation-turn as it happens; api/conversation-webhook.js
+    // reconciles the authoritative full transcript once the call ends,
+    // server-side, independent of anything in this browser tab.
+    let liveSessionId = null;
+    let liveTurnIndex = 0;
+
+    function fireConversationTurn(role, content, raw) {
+      if (!liveSessionId || !currentUser?.userId) return;
+      try {
+        fetch('/api/conversation-turn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: liveSessionId,
+            userId: currentUser.userId,
+            conversationId: lastConversationId,
+            turnIndex: liveTurnIndex++,
+            role, content, raw,
+          }),
+          keepalive: true,
+        });
+      } catch (e) { console.warn('[CONV-LOG] turn save failed', e); }
+    }
+
+    // Per-session system prompt for the CURRENT user, built server-side by
+    // /api/prime-agent from their own memories. Applied as a per-session
+    // override on the widget's elevenlabs-convai:call event so user A's facts
+    // never reach user B's session. Set in initApp(); null until primed.
+    let sessionPromptOverride = null;
+
+    function fireExtractMemories(reason) {
+      if (extractFired) { console.log('[MEM-HB] fire skipped — already fired:', reason); return; }
+      if (!lastConversationId) { console.log('[MEM-HB] fire skipped — no conversationId yet:', reason); return; }
+      // Only latch on terminal events. idle-timeout fires mid-call when the transcript is still empty/partial,
+      // returns 0 facts, and was incorrectly suppressing the real disconnect re-fire. The 425 response on empty
+      // transcript is the server-side half of this fix; together they let the real call-end persist memory.
+      if (reason === 'disconnect' || reason === 'pagehide') extractFired = true;
+      // Isolation: never fall back to 'troy'. If we somehow have no real
+      // user id, skip the write rather than persist into another user's prefix.
+      if (!currentUser?.userId) { console.warn('[MEM-HB] fire skipped — no currentUser.userId:', reason); return; }
+      try {
+        fetch('/api/extract-memories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: currentUser.userId, conversationId: lastConversationId }),
+          keepalive: true,
+        });
+        console.log('[MEM-HB] extract-memories POSTed:', reason, lastConversationId);
+      } catch (e) { console.warn('[MEM-HB] extract-memories failed', e); }
+    }
+
+    // Catch-all heartbeat: log EVERY elevenlabs-* event so we can see what the widget actually dispatches.
+    ['elevenlabs-convai:call', 'elevenlabs-convai:call-started', 'elevenlabs-convai:call-ended', 'elevenlabs-convai:message', 'elevenlabs-convai:disconnect', 'elevenlabs-convai:status'].forEach(evtName => {
+      document.addEventListener(evtName, (e) => {
+        console.log('[MEM-HB] event fired:', evtName, 'detail keys:', Object.keys(e.detail || {}));
+      });
+    });
+
+    document.addEventListener('elevenlabs-convai:call', (e) => {
+      console.log('[MEM-HB] :call handler running — has detail?', !!e.detail, 'has config?', !!e.detail?.config);
+      startImagePoller();
+      startVideoPoller();
+      extractFired = false;
+      lastConversationId = null;
+      liveSessionId = crypto.randomUUID();
+      liveTurnIndex = 0;
+      console.log('[CONV-LOG] new live session:', liveSessionId);
+      const cfg = e.detail?.config;
+      if (!cfg) { console.warn('[MEM-HB] BAIL — no e.detail.config, cannot inject onConnect'); return; }
+
+      // ── PER-USER ISOLATION ──────────────────────────────────────────────
+      // Apply THIS user's prompt (with only THEIR memories) as a per-session
+      // override scoped to this call's socket. SDK ships cfg.overrides.agent.
+      // prompt.prompt as conversation_config_override on this session only —
+      // it never mutates the shared agent, so user A's facts can't leak into
+      // user B's session. Verified: @elevenlabs/client BaseConnection.d.ts:20-25
+      // (overrides.agent.prompt: { prompt?: string }) + lib.iife.js:457-461
+      // (config.overrides.agent.prompt -> conversation_config_override.agent.prompt).
+      // REQUIRES "Overrides → System prompt" enabled in the agent's Security tab.
+      if (sessionPromptOverride) {
+        cfg.overrides = cfg.overrides || {};
+        cfg.overrides.agent = cfg.overrides.agent || {};
+        cfg.overrides.agent.prompt = { ...(cfg.overrides.agent.prompt || {}), prompt: sessionPromptOverride };
+        console.log('[MEM-HB] applied per-session prompt override — len:', sessionPromptOverride.length);
+      } else {
+        console.warn('[MEM-HB] no sessionPromptOverride set — agent will use its default (non-personalized) prompt');
+      }
+
+      // Expose this user's id to the agent's tools as a dynamic variable.
+      // SDK ships this as dynamic_variables on the session (verified:
+      // @elevenlabs/client lib.iife.js:472 `overridesEvent.dynamic_variables`).
+      // DASHBOARD STEP REQUIRED: edit the agent's `save_memory` webhook tool
+      // (Agent → Tools → save_memory) to add a `userId` body param bound to
+      // {{user_id}} so in-call saves post to THIS user's prefix instead of
+      // /api/memory's now-removed 'troy' default. Until that schema edit ships,
+      // in-call save_memory calls will 400 (safe failure) rather than leak.
+      if (currentUser?.userId) {
+        cfg.dynamicVariables = { ...(cfg.dynamicVariables || {}), user_id: currentUser.userId };
+        console.log('[MEM-HB] set dynamicVariables.user_id for in-call tools');
+      }
+
+      // ── Voice override ────────────────────────────────────────────────
+      // SDK ships overrides.tts.voiceId as part of the same
+      // conversation_config_override this handler already uses for the prompt
+      // (verified: @elevenlabs/client dist/utils/BaseConnection.d.ts:26-31
+      // `tts?: { voiceId?: string; speed?: number; ... }`).
+      // REQUIRES "Overrides → Voice" enabled in the agent's Security tab, the
+      // same way the prompt override requires "System prompt". If it is off,
+      // ElevenLabs ignores this and the agent keeps its configured voice.
+      const chosenVoiceId = localStorage.getItem('thinkbuddy_el_voice_v1');
+      if (chosenVoiceId) {
+        cfg.overrides = cfg.overrides || {};
+        cfg.overrides.tts = { ...(cfg.overrides.tts || {}), voiceId: chosenVoiceId };
+        console.log('[MEM-HB] applied per-session voice override:', chosenVoiceId);
+      }
+
+      const userOnConnect = cfg.onConnect;
+      cfg.onConnect = (info) => {
+        lastConversationId = info?.conversationId || null;
+        console.log('[MEM-HB] onConnect fired — conversationId:', lastConversationId);
+        document.dispatchEvent(new CustomEvent('thinkinbuddy:call-connected'));
+        if (typeof userOnConnect === 'function') try { userOnConnect(info); } catch {}
+      };
+      const userOnMessage = cfg.onMessage;
+      cfg.onMessage = (msg) => {
+        // Capture conversationId from the message itself — onConnect isn't firing in this widget version.
+        const cid = msg?.conversation_id || msg?.conversationId || msg?.conversation?.id || msg?.session_id || msg?.sessionId || null;
+        if (cid && !lastConversationId) {
+          lastConversationId = cid;
+          console.log('[MEM-HB] captured conversationId from onMessage:', lastConversationId);
+        }
+        if (!lastConversationId) console.log('[MEM-HB] onMessage but NO conversationId — msg shape:', Object.keys(msg || {}));
+        console.log('[MEM-HB] onMessage fired — resetting idle timer');
+        // Live turn capture: JS SDK onMessage payload is {message, source}
+        // (source: 'user'|'ai') per ElevenLabs' documented client SDK shape.
+        const turnRole = msg?.source === 'user' ? 'user' : 'agent';
+        const turnContent = typeof msg?.message === 'string' ? msg.message : (typeof msg?.text === 'string' ? msg.text : null);
+        if (turnContent) {
+          fireConversationTurn(turnRole, turnContent, msg);
+          // EXPORT FIX: the export menu builds from `currentHistory`, which
+          // previously only ever grew on the TEXT path (sendToThinkinBuddy). A voice
+          // brain dump left it empty, so Export produced a header and nothing
+          // else. currentHistory lives in the next <script> block, so hand the
+          // turn over by event rather than reaching across scopes.
+          document.dispatchEvent(new CustomEvent('thinkinbuddy:turn', {
+            detail: { role: turnRole === 'user' ? 'user' : 'assistant', content: turnContent },
+          }));
+        }
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          console.log('[MEM-HB] idle timer expired — firing extract-memories');
+          stopImagePoller();
+          stopVideoPoller();
+          fireExtractMemories('idle-timeout');
+        }, IDLE_MS);
+        if (typeof userOnMessage === 'function') try { userOnMessage(msg); } catch {}
+      };
+      const userOnDisconnect = cfg.onDisconnect;
+      cfg.onDisconnect = (info) => {
+        console.log('[MEM-HB] onDisconnect fired — firing extract-memories');
+        stopImagePoller();
+        stopVideoPoller();
+        fireExtractMemories('disconnect');
+        document.dispatchEvent(new CustomEvent('thinkinbuddy:call-ended'));
+        if (typeof userOnDisconnect === 'function') try { userOnDisconnect(info); } catch {}
+      };
+    });
+
+    // pagehide fires for TWO very different situations, and treating them the
+    // same is what used to end a call the moment the phone was pocketed:
+    //
+    //   e.persisted === true  -> the page is going into the back/forward cache.
+    //                            Locking the screen or switching apps on iOS
+    //                            Safari lands here. The page is frozen, NOT
+    //                            destroyed, and pageshow will revive it.
+    //   e.persisted === false -> a real teardown (tab closed, navigation away).
+    //
+    // Only the second is terminal. Firing extract-memories on the first also
+    // latched extractFired = true, so when the call genuinely ended later the
+    // real disconnect was skipped ("fire skipped — already fired") and the
+    // conversation was never persisted.
+    window.addEventListener('pagehide', (e) => {
+      if (e.persisted) {
+        console.log('[MEM-HB] pagehide (bfcache freeze) — not terminal, keeping session');
+        return;
+      }
+      console.log('[MEM-HB] pagehide (teardown) — firing extract-memories');
+      stopImagePoller();
+      stopVideoPoller();
+      fireExtractMemories('pagehide');
+    });
+
+    // Coming back from the bfcache: restart the media pollers that the freeze
+    // suspended, so images/videos generated mid-call still surface.
+    window.addEventListener('pageshow', (e) => {
+      if (!e.persisted) return;
+      console.log('[MEM-HB] pageshow — restored from bfcache');
+      if (lastConversationId && !extractFired) {
+        startImagePoller();
+        startVideoPoller();
+      }
+    });
+  </script>
+
+  <script>
+    // ─── User management (localStorage) ───────────────────────────────
+    const STORAGE_KEY = 'thinkbuddy_user_v1';
+    const HISTORY_KEY = 'thinkbuddy_history_v1';
+
+    function loadUser() {
+      try {
+        const u = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+        // CANONICAL ID: every device shares ONE memory under user_id 'troy'.
+        // Collapse any legacy per-browser random id (u_...) onto 'troy' so this
+        // user's facts are never split across browsers again.
+        if (u && u.userId !== 'troy') { u.userId = 'troy'; saveUser(u); }
+        return u;
+      } catch (e) { return null; }
+    }
+    function saveUser(u) { localStorage.setItem(STORAGE_KEY, JSON.stringify(u)); }
+    function loadHistory() {
+      try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+      catch (e) { return []; }
+    }
+    function saveHistory(h) { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); }
+    function clearAll() {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(HISTORY_KEY);
+    }
+    function genUserId() {
+      // CANONICAL ID: this app is single-user (Troy). Return the fixed id 'troy'
+      // so every device/browser shares ONE memory instead of generating a random
+      // per-browser id that strands facts under separate user_ids.
+      return 'troy';
+    }
+
+    // ─── Onboarding flow ──────────────────────────────────────────────
+    const onboardingEl = document.getElementById('onboarding');
+    const onboardNameEl = document.getElementById('onboardName');
+    const onboardBuddyNameEl = document.getElementById('onboardBuddyName');
+    const onboardConsentEl = document.getElementById('onboardConsent');
+    const onboardSubmitEl = document.getElementById('onboardSubmit');
+
+    function showOnboarding() {
+      onboardingEl.classList.remove('hidden');
+      setTimeout(() => onboardNameEl.focus(), 100);
+    }
+    function hideOnboarding() { onboardingEl.classList.add('hidden'); }
+
+    onboardSubmitEl.addEventListener('click', completeOnboarding);
+    onboardNameEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') completeOnboarding();
+    });
+
+    function completeOnboarding() {
+      const name = onboardNameEl.value.trim();
+      if (!name) { onboardNameEl.focus(); return; }
+      const buddyName = onboardBuddyNameEl.value.trim() || 'ThinkinBuddy';
+      const consent = onboardConsentEl.checked;
+      const user = {
+        userId: genUserId(),
+        name,
+        buddyName,
+        consentResearch: consent,
+        consentDate: consent ? new Date().toISOString() : null,
+        firstVisit: true,
+        createdAt: new Date().toISOString(),
+        notes: []
+      };
+      saveUser(user);
+      saveHistory([]);
+      hideOnboarding();
+      initApp(user);
+    }
+
+    // ─── App state ────────────────────────────────────────────────────
+    let currentUser = null;
+    let currentHistory = [];
+
+    const subtitleEl = document.getElementById('subtitle');
+    const footerNoteEl = document.getElementById('footerNote');
+
+    function refreshChrome() {
+      if (!currentUser) return;
+      const buddyName = currentUser.buddyName || 'ThinkinBuddy';
+      // Update title to show the buddy's name
+      document.querySelector('.title').textContent = buddyName.toUpperCase();
+      const mode = window.thinkinBuddyMode || 'default';
+      const modeLabel =
+        mode === 'spanish_tutor' ? ' · 🇪🇸 ESPAÑOL TUTOR' :
+        mode === 'feynman_module1' ? ' · 🧠 FEYNMAN MODULE 1' : '';
+      subtitleEl.textContent = `YOUR THINKING PARTNER — ${currentUser.name.toUpperCase()}${modeLabel}`;
+      const tutorToggleHtml =
+        mode === 'spanish_tutor'
+          ? `<a id="tutorOffLink">Switch back to regular buddy</a> · `
+        : mode === 'feynman_module1'
+          ? `<a id="feynmanOffLink">Switch back to regular buddy</a> · `
+          : `<a id="tutorOnLink">Try Spanish tutor mode</a> · <a id="feynmanOnLink">Try Feynman Module 1</a> · `;
+      const consentText = currentUser.consentResearch
+        ? `Conversations may be saved for research as previously discussed. <a id="optoutLink">Opt out</a>`
+        : `<a id="optinLink">Enable research mode</a>`;
+      footerNoteEl.innerHTML = tutorToggleHtml + consentText;
+      const tutorOn = document.getElementById('tutorOnLink');
+      const tutorOff = document.getElementById('tutorOffLink');
+      if (tutorOn) tutorOn.addEventListener('click', () => {
+        localStorage.setItem('thinkinbuddy_mode_v1', 'spanish_tutor');
+        location.reload();
+      });
+      if (tutorOff) tutorOff.addEventListener('click', () => {
+        localStorage.removeItem('thinkinbuddy_mode_v1');
+        location.reload();
+      });
+      const feynmanOn = document.getElementById('feynmanOnLink');
+      const feynmanOff = document.getElementById('feynmanOffLink');
+      if (feynmanOn) feynmanOn.addEventListener('click', () => {
+        localStorage.setItem('thinkinbuddy_mode_v1', 'feynman_module1');
+        location.reload();
+      });
+      if (feynmanOff) feynmanOff.addEventListener('click', () => {
+        localStorage.removeItem('thinkinbuddy_mode_v1');
+        location.reload();
+      });
+      const optout = document.getElementById('optoutLink');
+      const optin = document.getElementById('optinLink');
+      if (optout) optout.addEventListener('click', () => {
+        currentUser.consentResearch = false;
+        saveUser(currentUser);
+        refreshChrome();
+      });
+      if (optin) optin.addEventListener('click', () => {
+        if (confirm('Enable research mode? Your conversations will be saved (anonymized) to help improve this app and for research on AI-assisted thinking.')) {
+          currentUser.consentResearch = true;
+          currentUser.consentDate = new Date().toISOString();
+          saveUser(currentUser);
+          refreshChrome();
+        }
+      });
+    }
+
+    // ─── Export menu ─────────────────────────────────────────────────
+    const exportMenuEl = document.getElementById('exportMenu');
+    const exportBtnEl  = document.getElementById('exportBtn');
+
+    // Toggle the dropdown open/closed
+    exportBtnEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!currentHistory || currentHistory.length === 0) {
+        alert('Nothing to export yet — start a conversation first.');
+        return;
+      }
+      exportMenuEl.classList.toggle('hidden');
+    });
+
+    // Close menu when clicking elsewhere
+    document.addEventListener('click', () => exportMenuEl.classList.add('hidden'));
+    exportMenuEl.addEventListener('click', (e) => e.stopPropagation());
+
+    // ─── Shared helpers ───────────────────────────────────────────────
+    // Say on the file's face what it is. This export is built from what THIS
+    // browser captured (currentHistory) — not from the server's transcript.
+    // A reload mid-conversation, a tab closed before a turn arrived, or a turn
+    // the widget never surfaced will be missing here and present server-side.
+    // The complete record lives in Neon (conversation_turns, written per turn
+    // by /api/conversation-turn), but the browser cannot read it back: the
+    // route that serves it is server-to-server only, and the userId this app
+    // uses is a constant, not a credential — so opening it to the browser
+    // would make every transcript world-readable. Until that is fixed with a
+    // real per-user token, this file is the device's copy, labelled as such.
+    function exportProvenance() {
+      const n = currentHistory.length;
+      return `Captured in this browser — ${n} turn${n === 1 ? '' : 's'} recorded on this device. `
+           + `If the page was reloaded or closed mid-conversation, earlier turns may be missing from this file.`;
+    }
+
+    function buildExportText() {
+      const date   = new Date().toISOString().slice(0, 10);
+      const userName = currentUser?.name || 'Session';
+      const buddyName = currentUser?.buddyName || 'ThinkinBuddy';
+      let txt = `${buddyName.toUpperCase()} SESSION — ${userName} — ${date}\n`;
+      txt += `${exportProvenance()}\n\n`;
+      for (const msg of currentHistory) {
+        const role = msg.role === 'user' ? userName : buddyName;
+        const clean = (msg.content || '').replace(/\[ACTION:[^\]]+\]/g, '').trim();
+        txt += `${role}: ${clean}\n\n`;
+      }
+      // Append any currently-displayed media URLs
+      const imgEl = document.getElementById('mediaImg');
+      const vidEl = document.getElementById('mediaVideo');
+      const imgSrc = imgEl && imgEl.src && !imgEl.src.endsWith(location.origin + '/') ? imgEl.src : null;
+      const vidSrc = vidEl && vidEl.src && !vidEl.src.endsWith(location.origin + '/') ? vidEl.src : null;
+      if (imgSrc) txt += `\n[Image generated this session]: ${imgSrc}\n`;
+      if (vidSrc) txt += `\n[Video generated this session]: ${vidSrc}\n`;
+      return { txt, userName, date, buddyName };
+    }
+
+    function buildMarkdown() {
+      const { txt, userName, date, buddyName } = buildExportText();
+      // Re-build as proper markdown
+      let md = `# ${buddyName} session — ${userName} — ${date}\n\n`;
+      md += `*${exportProvenance()}*\n\n`;
+      for (const msg of currentHistory) {
+        const role = msg.role === 'user' ? userName : buddyName;
+        const clean = (msg.content || '').replace(/\[ACTION:[^\]]+\]/g, '').trim();
+        md += `**${role}:** ${clean}\n\n`;
+      }
+      const imgEl = document.getElementById('mediaImg');
+      const vidEl = document.getElementById('mediaVideo');
+      const imgSrc = imgEl && imgEl.src && !imgEl.src.endsWith(location.origin + '/') ? imgEl.src : null;
+      const vidSrc = vidEl && vidEl.src && !vidEl.src.endsWith(location.origin + '/') ? vidEl.src : null;
+      if (imgSrc) md += `\n![Generated image](${imgSrc})\n`;
+      if (vidSrc) md += `\n[Generated video](${vidSrc})\n`;
+      return { md, userName, date };
+    }
+
+    function triggerDownload(content, filename, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // ─── 1. Share via Web Share API ───────────────────────────────────
+    document.getElementById('exportShareBtn').addEventListener('click', async () => {
+      exportMenuEl.classList.add('hidden');
+      const { txt, userName, date, buddyName } = buildExportText();
+      const shareTitle = `${buddyName} — ${userName} — ${date}`;
+
+      // Feature-detect: try Files share first (Android Chrome PWA gets share sheet)
+      // then fall back to text-only share, then fall back to plain download.
+      if (navigator.share) {
+        try {
+          // Try sharing as a .txt file (works on Android Chrome ≥ 89, iOS ≥ 15.1)
+          if (navigator.canShare) {
+            const file = new File([txt], `thinkinbuddy-${userName.toLowerCase()}-${date}.txt`, { type: 'text/plain' });
+            if (navigator.canShare({ files: [file] })) {
+              await navigator.share({ title: shareTitle, files: [file] });
+              return;
+            }
+          }
+          // Text-only share (older Android, desktop Chrome)
+          await navigator.share({ title: shareTitle, text: txt });
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return; // user dismissed sheet — no fallback needed
+          // Other errors → fall through to download
+        }
+      }
+      // Fallback: download .txt
+      triggerDownload(txt, `thinkinbuddy-${userName.toLowerCase()}-${date}.txt`, 'text/plain');
+      alert('Share not supported in this browser — downloaded as .txt instead.');
+    });
+
+    // ─── 2. PDF via print dialog ──────────────────────────────────────
+    document.getElementById('exportPdfBtn').addEventListener('click', () => {
+      exportMenuEl.classList.add('hidden');
+      const { userName, date, buddyName } = buildExportText();
+      const printEl = document.getElementById('printOutput');
+
+      // Build readable HTML for the print layer
+      let html = `<div class="print-header">${buddyName} session — ${userName} — ${date}</div>`;
+      for (const msg of currentHistory) {
+        const role  = msg.role === 'user' ? userName : buddyName;
+        const clean = (msg.content || '').replace(/\[ACTION:[^\]]+\]/g, '').trim();
+        html += `<div class="print-msg"><div class="print-role">${role}</div><div class="print-text">${clean.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div></div>`;
+      }
+      // Include any displayed media URLs
+      const imgEl = document.getElementById('mediaImg');
+      const vidEl = document.getElementById('mediaVideo');
+      const imgSrc = imgEl && imgEl.src && !imgEl.src.endsWith(location.origin + '/') ? imgEl.src : null;
+      const vidSrc = vidEl && vidEl.src && !vidEl.src.endsWith(location.origin + '/') ? vidEl.src : null;
+      if (imgSrc) html += `<div class="print-msg"><div class="print-role">Generated image</div><div class="print-text"><a href="${imgSrc}">${imgSrc}</a></div></div>`;
+      if (vidSrc) html += `<div class="print-msg"><div class="print-role">Generated video</div><div class="print-text"><a href="${vidSrc}">${vidSrc}</a></div></div>`;
+
+      printEl.innerHTML = html;
+      window.print();
+      // Clean up after print dialog closes
+      setTimeout(() => { printEl.innerHTML = ''; }, 2000);
+    });
+
+    // ─── 3. Markdown download ─────────────────────────────────────────
+    document.getElementById('exportMdBtn').addEventListener('click', () => {
+      exportMenuEl.classList.add('hidden');
+      const { md, userName, date } = buildMarkdown();
+      triggerDownload(md, `thinkinbuddy-${userName.toLowerCase()}-${date}.md`, 'text/markdown');
+    });
+
+    // ─── 4. Plain text download ───────────────────────────────────────
+    document.getElementById('exportTxtBtn').addEventListener('click', () => {
+      exportMenuEl.classList.add('hidden');
+      const { txt, userName, date } = buildExportText();
+      triggerDownload(txt, `thinkinbuddy-${userName.toLowerCase()}-${date}.txt`, 'text/plain');
+    });
+
+    // ─── 5. Copy to clipboard ─────────────────────────────────────────
+    document.getElementById('exportCopyBtn').addEventListener('click', async () => {
+      exportMenuEl.classList.add('hidden');
+      const { txt } = buildExportText();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          await navigator.clipboard.writeText(txt);
+          // Brief visual confirmation: change button label momentarily
+          const btn = document.getElementById('exportBtn');
+          const orig = btn.textContent;
+          btn.textContent = '✓ Copied!';
+          setTimeout(() => { btn.textContent = orig; }, 1800);
+          return;
+        } catch (err) {
+          // Permission denied or other error — fall through
+        }
+      }
+      // Fallback: execCommand (deprecated but still works on iOS Safari, older Android)
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = txt;
+        ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        const btn = document.getElementById('exportBtn');
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => { btn.textContent = orig; }, 1800);
+      } catch (e) {
+        alert('Could not copy — try the Markdown or Text download instead.');
+      }
+    });
+
+    // ─── Reset (sign out / new user) ──────────────────────────────────
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      if (confirm('Sign out and start fresh? Your local history will be cleared.')) {
+        clearAll();
+        location.reload();
+      }
+    });
+
+    // ══ VOICE TURNS → currentHistory (export fix) ═══════════════════════
+    // The ElevenLabs path posts each turn to /api/conversation-turn, but never
+    // touched currentHistory — which is the ONLY thing the export menu reads
+    // (buildExportText iterates it). So exporting after a voice brain dump
+    // produced a file containing just the header line. Mirroring turns here
+    // makes all five existing export actions work for voice sessions, using
+    // the same localStorage history the text path already persists.
+    document.addEventListener('thinkinbuddy:turn', (e) => {
+      const { role, content } = e.detail || {};
+      if (!content) return;
+      const last = currentHistory[currentHistory.length - 1];
+      // The widget can re-emit the same partial turn; don't duplicate it.
+      if (last && last.role === role && last.content === content) return;
+      currentHistory.push({ role, content });
+      saveHistory(currentHistory);
+    });
+
+    // ══ BACKGROUND AUDIO ("pocket mode") ════════════════════════════════
+    // Goal: lock the screen, put the phone in a pocket, keep talking over
+    // Bluetooth. What stops that today:
+    //
+    //  1. Nothing in this app ever set navigator.mediaSession. Without media
+    //     metadata the OS has no media notification for the tab, so Android
+    //     treats it as an ordinary backgrounded page and is free to throttle
+    //     its timers and tear down the socket.
+    //  2. The ElevenLabs SDK plays agent audio through an <audio> element fed
+    //     by createMediaStreamDestination() (node_modules/@elevenlabs/client/
+    //     dist/utils/output.js:20-30). A MediaStream-backed element does not
+    //     reliably register as an OS-level media session the way a normal
+    //     media resource does — so no notification, no transport controls.
+    //  3. The SDK's own wake lock is navigator.wakeLock.request("screen")
+    //     (dist/VoiceConversation.js:15, enabled by default at :33). A screen
+    //     wake lock is released by the browser as soon as the page is hidden,
+    //     which is exactly when pocket mode begins — it keeps the screen ON
+    //     while you are looking at it and does nothing once you are not.
+    //
+    // Fix: hold a real, conventional looping audio element (silent) for the
+    // duration of the call and publish mediaSession metadata. That gives the
+    // OS a media session to attach to, which is what keeps the tab resident
+    // and lights up the Bluetooth transport controls.
+    const BG_AUDIO_KEY = 'thinkbuddy_bgaudio_v1';
+
+    function bgAudioPrefs() {
+      try {
+        const p = JSON.parse(localStorage.getItem(BG_AUDIO_KEY) || 'null');
+        // Background on by default; keep-awake off by default (battery).
+        return { background: p ? p.background !== false : true, keepAwake: !!(p && p.keepAwake) };
+      } catch (e) { return { background: true, keepAwake: false }; }
+    }
+
+    // A one-second silent WAV, built at runtime so there's no giant base64
+    // blob in the source. Looped, it is a legitimate ongoing media resource.
+    function silentWavUrl() {
+      const sampleRate = 8000, seconds = 1;
+      const frames = sampleRate * seconds;
+      const buf = new ArrayBuffer(44 + frames * 2);
+      const view = new DataView(buf);
+      const ascii = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+      ascii(0, 'RIFF');  view.setUint32(4, 36 + frames * 2, true);
+      ascii(8, 'WAVE');  ascii(12, 'fmt ');
+      view.setUint32(16, 16, true);          // PCM chunk size
+      view.setUint16(20, 1, true);           // format = PCM
+      view.setUint16(22, 1, true);           // mono
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);           // block align
+      view.setUint16(34, 16, true);          // bits per sample
+      ascii(36, 'data'); view.setUint32(40, frames * 2, true);
+      // Samples stay zero — silence.
+      return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+    }
+
+    const bgAudio = {
+      el: null, url: null, wakeLock: null, active: false, lastError: null,
+
+      async start() {
+        if (this.active) return;
+        if (!bgAudioPrefs().background) { this.note('disabled in settings'); return; }
+        try {
+          if (!this.el) {
+            this.url = silentWavUrl();
+            this.el = new Audio(this.url);
+            this.el.loop = true;
+            this.el.volume = 0.0001;   // inaudible, but a real playing stream
+            this.el.setAttribute('playsinline', '');
+          }
+          await this.el.play();
+          this.active = true;
+          this.lastError = null;
+          this.publishMetadata();
+          await this.acquireWakeLock();
+          this.note('running');
+        } catch (err) {
+          // Autoplay policy can reject this if we ever get here without a
+          // user gesture. Report it rather than pretending it worked.
+          this.lastError = err?.message || String(err);
+          this.active = false;
+          this.note('failed');
+        }
+        refreshBgAudioStatus();
+      },
+
+      publishMetadata() {
+        if (!('mediaSession' in navigator)) return;
+        const buddy = currentUser?.buddyName || 'ThinkinBuddy';
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: `${buddy} — listening`,
+          artist: currentUser?.name ? `Talking with ${currentUser.name}` : 'Voice session',
+          album: 'ThinkinBuddy',
+          artwork: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' }],
+        });
+        navigator.mediaSession.playbackState = 'playing';
+        // Handlers must exist for the OS to render transport controls at all.
+        const stop = () => { this.stop(); };
+        try {
+          navigator.mediaSession.setActionHandler('pause', stop);
+          navigator.mediaSession.setActionHandler('stop', stop);
+          navigator.mediaSession.setActionHandler('play', () => this.start());
+        } catch (e) { /* older browsers reject unknown actions */ }
+      },
+
+      async acquireWakeLock() {
+        if (!bgAudioPrefs().keepAwake) return;
+        if (!('wakeLock' in navigator)) return;
+        try { this.wakeLock = await navigator.wakeLock.request('screen'); }
+        catch (e) { /* denied or not permitted while hidden — non-fatal */ }
+      },
+
+      async stop() {
+        this.active = false;
+        try { this.el?.pause(); } catch (e) {}
+        if (this.el) { this.el.src = ''; this.el = null; }
+        if (this.url) { URL.revokeObjectURL(this.url); this.url = null; }
+        try { await this.wakeLock?.release(); } catch (e) {}
+        this.wakeLock = null;
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'none';
+          navigator.mediaSession.metadata = null;
+        }
+        this.note('stopped');
+        refreshBgAudioStatus();
+      },
+
+      note(s) { this.state = s; },
+      state: 'not started',
+    };
+    window.thinkinBuddyAudio = bgAudio;
+
+    // A screen wake lock is dropped whenever the page hides. Re-take it on
+    // return so a long call doesn't lose it after the first glance away.
+    document.addEventListener('visibilitychange', () => {
+      console.log('[BG-AUDIO] visibility:', document.visibilityState, '| keepalive active:', bgAudio.active);
+      if (document.visibilityState === 'visible' && bgAudio.active && !bgAudio.wakeLock) {
+        bgAudio.acquireWakeLock();
+      }
+    });
+
+    // Start on the widget's own :call event — that fires inside the user's
+    // click on the call button, which is the gesture autoplay policy requires.
+    document.addEventListener('elevenlabs-convai:call', () => bgAudio.start());
+    document.addEventListener('thinkinbuddy:call-ended', () => bgAudio.stop());
+
+    function applyKeepAwakePref() {
+      if (!bgAudio.active) return;
+      if (bgAudioPrefs().keepAwake) bgAudio.acquireWakeLock();
+      else { try { bgAudio.wakeLock?.release(); } catch (e) {} bgAudio.wakeLock = null; }
+    }
+
+    function refreshBgAudioStatus() {
+      const el = document.getElementById('bgAudioStatus');
+      if (!el) return;
+      const bits = [`Status: ${bgAudio.state}`];
+      if (bgAudio.lastError) bits.push(`error: ${bgAudio.lastError}`);
+      bits.push(`media session: ${'mediaSession' in navigator ? 'supported' : 'unsupported'}`);
+      bits.push(`wake lock: ${'wakeLock' in navigator ? (bgAudio.wakeLock ? 'held' : 'supported') : 'unsupported'}`);
+      el.textContent = bits.join(' · ');
+    }
+
+    // ─── Settings panel ───────────────────────────────────────────────
+    const settingsPanelEl = document.getElementById('settingsPanel');
+    const voiceSelectEl = document.getElementById('voiceSelect');
+
+    // ══ API KEY VAULT ═══════════════════════════════════════════════════
+    // Keys live ONLY in this browser's localStorage. They are never posted to
+    // any server for storage, never logged, and never sent anywhere except as
+    // a request header on this app's own /api call for that provider (see
+    // apiFetch below). Server-side, api/* still falls back to process.env when
+    // the header is absent, so leaving a field blank keeps today's behaviour.
+    //
+    // Each entry's `usedBy` is the real list of files that read that
+    // process.env var — verified by grep over api/ and lib/, not guessed.
+    const KEYS_STORAGE = 'thinkbuddy_keys_v1';
+    const KEY_SPECS = [
+      { id: 'OPENAI_API_KEY',     label: 'OpenAI',      hint: 'sk-…',
+        usedBy: 'image generation (gpt-image-2), chat, search, browse, video' },
+      { id: 'ANTHROPIC_API_KEY',  label: 'Anthropic',   hint: 'sk-ant-…',
+        usedBy: 'text chat, memory extraction, diary' },
+      { id: 'ELEVENLABS_API_KEY', label: 'ElevenLabs',  hint: 'sk_…',
+        usedBy: 'voice list, speak endpoint, transcript fetch' },
+      { id: 'GOOGLE_API_KEY',     label: 'Google',      hint: 'AIza…',
+        usedBy: 'Imagen image generation' },
+      { id: 'REPLICATE_API_TOKEN',label: 'Replicate',   hint: 'r8_…',
+        usedBy: 'Flux image generation' },
+      { id: 'RUNWAY_API_KEY',     label: 'Runway',      hint: 'key_…',
+        usedBy: 'video generation' },
+      { id: 'HEYGEN_API_KEY',     label: 'HeyGen',      hint: '',
+        usedBy: 'avatar video generation' },
+    ];
+
+    function loadKeys() {
+      try { return JSON.parse(localStorage.getItem(KEYS_STORAGE) || '{}'); }
+      catch (e) { return {}; }
+    }
+    function saveKeys(k) { localStorage.setItem(KEYS_STORAGE, JSON.stringify(k)); }
+
+    // Show enough to recognise a key, never enough to use it.
+    function maskKey(v) {
+      if (!v) return '';
+      if (v.length <= 10) return '•'.repeat(v.length);
+      return `${v.slice(0, 4)}${'•'.repeat(Math.min(18, v.length - 8))}${v.slice(-4)}`;
+    }
+
+    // Light the pill's dot when at least one key is stored on this device.
+    function refreshPillState() {
+      const pill = document.getElementById('settingsPill');
+      if (!pill) return;
+      const any = Object.values(loadKeys()).some(v => v && v.length);
+      pill.classList.toggle('configured', any);
+    }
+
+    // Build the key fields. Stored keys render masked and read-only until the
+    // user chooses to replace them, so a saved secret is never re-displayed.
+    function renderKeyFields() {
+      const host = document.getElementById('keyFields');
+      if (!host) return;
+      const stored = loadKeys();
+      host.innerHTML = '';
+      for (const spec of KEY_SPECS) {
+        const has = !!stored[spec.id];
+        const wrap = document.createElement('div');
+        wrap.className = 'key-field';
+        wrap.innerHTML = `
+          <div class="key-head">
+            <label for="key_${spec.id}">${spec.label}</label>
+            <span class="key-used">${spec.usedBy}</span>
+          </div>
+          <div class="key-row">
+            <input type="password" id="key_${spec.id}" autocomplete="off"
+                   spellcheck="false" placeholder="${has ? '' : (spec.hint || 'paste key')}" />
+            <button type="button" class="key-clear" data-clear="${spec.id}">${has ? 'Clear' : 'Hide'}</button>
+          </div>
+          <div class="key-stored" data-stored="${spec.id}"></div>`;
+        host.appendChild(wrap);
+
+        const input = wrap.querySelector('input');
+        const note  = wrap.querySelector('[data-stored]');
+        if (has) {
+          input.value = '';
+          input.placeholder = maskKey(stored[spec.id]);
+          note.textContent = `Saved on this device — type to replace.`;
+        } else {
+          note.textContent = '';
+        }
+
+        wrap.querySelector('.key-clear').addEventListener('click', () => {
+          const k = loadKeys();
+          if (k[spec.id]) {
+            delete k[spec.id];
+            saveKeys(k);
+            renderKeyFields();
+            refreshPillState();
+          } else {
+            // Nothing stored — this button just toggles visibility of typing.
+            input.type = input.type === 'password' ? 'text' : 'password';
+          }
+        });
+      }
+    }
+
+    // Collect anything typed into the key fields and merge over what's stored.
+    function commitKeyFields() {
+      const stored = loadKeys();
+      for (const spec of KEY_SPECS) {
+        const el = document.getElementById(`key_${spec.id}`);
+        if (!el) continue;
+        const v = el.value.trim();
+        if (v) stored[spec.id] = v;
+      }
+      saveKeys(stored);
+      refreshPillState();
+    }
+
+    // ══ apiFetch — attach user keys to this app's own /api calls only ═══
+    // Same signature as fetch(). Two rules, both enforced below:
+    //
+    //   1. Cross-origin gets NOTHING. If the URL is not a same-origin /api/
+    //      path, no key header is attached at all, so a stored secret cannot
+    //      leak to a third party even if some other code calls this.
+    //   2. Each route receives ONLY the providers it actually reads. The map
+    //      below mirrors the real process.env usage in api/ (verified by grep
+    //      per file), so e.g. the OpenAI key is never sent to /api/voices.
+    //
+    // Anything not listed gets no key headers — deny by default.
+    const ROUTE_PROVIDERS = {
+      'voices':            ['ELEVENLABS_API_KEY'],
+      'speak':             ['ELEVENLABS_API_KEY'],
+      'extract-memories':  ['ELEVENLABS_API_KEY', 'ANTHROPIC_API_KEY'],
+      'chat':              ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
+      'search':            ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
+      'browse':            ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
+      'diary':             ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
+      'memory':            ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
+      'image':             ['OPENAI_API_KEY'],
+      'image-flux':        ['REPLICATE_API_TOKEN', 'OPENAI_API_KEY'],
+      'image-imagen':      ['GOOGLE_API_KEY', 'OPENAI_API_KEY'],
+      'video':             ['RUNWAY_API_KEY', 'OPENAI_API_KEY'],
+      'video-runway':      ['RUNWAY_API_KEY', 'OPENAI_API_KEY'],
+      'video-runway-veo':  ['RUNWAY_API_KEY'],
+      'video-heygen':      ['HEYGEN_API_KEY'],
+      'video-sora':        ['OPENAI_API_KEY'],
+      'latest-video':      ['OPENAI_API_KEY'],
+    };
+
+    function apiFetch(url, opts = {}) {
+      if (typeof url !== 'string' || !url.startsWith('/api/')) return fetch(url, opts);
+      const route = url.slice(5).split(/[?#]/)[0];
+      const allowed = ROUTE_PROVIDERS[route] || [];
+      const keys = loadKeys();
+      const headers = { ...(opts.headers || {}) };
+      for (const envVar of allowed) {
+        const v = keys[envVar];
+        if (v) headers[`X-User-Key-${envVar.replace(/_API_KEY$|_API_TOKEN$/, '')}`] = v;
+      }
+      return fetch(url, { ...opts, headers });
+    }
+    window.thinkinBuddyApiFetch = apiFetch;
+
+    // Light the pill on first paint when this device already holds keys,
+    // instead of waiting for the user to open the panel and save something.
+    // Must run AFTER the consts above: loadKeys() reads KEYS_STORAGE, and its
+    // own try/catch would quietly swallow the temporal-dead-zone error and
+    // report "no keys stored" if this were hoisted above the declaration.
+    refreshPillState();
+
+    // ══ ElevenLabs voice picker ═════════════════════════════════════════
+    // Populated from /api/voices, which proxies ElevenLabs GET /v1/voices so
+    // the key never has to reach the browser unless the user supplied it.
+    const elVoiceSelectEl = document.getElementById('elVoiceSelect');
+    const EL_VOICE_KEY = 'thinkbuddy_el_voice_v1';
+    let elVoicesLoaded = false;
+
+    async function populateElevenLabsVoices() {
+      if (elVoicesLoaded || !elVoiceSelectEl) return;
+      const saved = localStorage.getItem(EL_VOICE_KEY) || '';
+      try {
+        const res = await apiFetch('/api/voices');
+        const data = await res.json();
+        if (!res.ok || !Array.isArray(data.voices)) {
+          document.getElementById('elVoiceHint').textContent =
+            `Could not load voices: ${data.error || res.status}. Add an ElevenLabs key under Keys, or set ELEVENLABS_API_KEY on the server.`;
+          return;
+        }
+        elVoiceSelectEl.innerHTML = '<option value="">Agent default</option>';
+        for (const v of data.voices) {
+          const opt = document.createElement('option');
+          opt.value = v.voice_id;
+          opt.textContent = v.category ? `${v.name} (${v.category})` : v.name;
+          if (v.voice_id === saved) opt.selected = true;
+          elVoiceSelectEl.appendChild(opt);
+        }
+        elVoicesLoaded = true;
+      } catch (e) {
+        document.getElementById('elVoiceHint').textContent =
+          'Could not reach /api/voices. Check your connection.';
+      }
+    }
+
+    function populateVoices() {
+      const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+      voiceSelectEl.innerHTML = '';
+      if (!voices.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '(No voices loaded yet — try opening this menu again in a sec)';
+        voiceSelectEl.appendChild(opt);
+        return;
+      }
+      // Filter to English voices first
+      const english = voices.filter(v => v.lang.startsWith('en'));
+      const list = english.length ? english : voices;
+      list.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.name;
+        opt.textContent = `${v.name} (${v.lang})${v.localService ? '' : ' — cloud'}`;
+        if (currentUser && v.name === currentUser.preferredVoice) opt.selected = true;
+        voiceSelectEl.appendChild(opt);
+      });
+    }
+
+    if (window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = populateVoices;
+    }
+
+    // ── Tabs ──────────────────────────────────────────────────────────
+    settingsPanelEl.querySelectorAll('.tabs button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        settingsPanelEl.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b === btn));
+        settingsPanelEl.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === tab));
+        if (tab === 'voice') { populateVoices(); populateElevenLabsVoices(); }
+        if (tab === 'audio') refreshBgAudioStatus();
+      });
+    });
+
+    document.getElementById('settingsPill').addEventListener('click', () => {
+      renderKeyFields();
+      refreshPillState();
+      populateVoices();
+      refreshBgAudioStatus();
+      // Reflect saved background-audio prefs each time the panel opens.
+      document.getElementById('bgAudioToggle').checked  = bgAudioPrefs().background;
+      document.getElementById('keepAwakeToggle').checked = bgAudioPrefs().keepAwake;
+      settingsPanelEl.classList.remove('hidden');
+    });
+
+    document.getElementById('settingsClose').addEventListener('click', () => {
+      settingsPanelEl.classList.add('hidden');
+    });
+
+    // Test speaks with whichever voice the user is currently looking at:
+    // an ElevenLabs voice if one is chosen, otherwise the browser voice.
+    document.getElementById('settingsTest').addEventListener('click', async () => {
+      const sample = "Hi, I'm ThinkinBuddy. This is what I sound like.";
+      const elVoiceId = elVoiceSelectEl?.value || '';
+
+      if (elVoiceId) {
+        const hint = document.getElementById('elVoiceHint');
+        const original = hint.textContent;
+        hint.textContent = 'Generating sample…';
+        try {
+          const res = await apiFetch('/api/speak', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: sample, voiceId: elVoiceId }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            hint.textContent = `Sample failed: ${err.error || res.status}`;
+            return;
+          }
+          const buf = await res.blob();
+          const url = URL.createObjectURL(buf);
+          const audio = new Audio(url);
+          audio.addEventListener('ended', () => URL.revokeObjectURL(url));
+          await audio.play();
+          hint.textContent = original;
+        } catch (e) {
+          hint.textContent = 'Sample failed — could not reach /api/speak.';
+        }
+        return;
+      }
+
+      if (!window.speechSynthesis) return;
+      const voices = window.speechSynthesis.getVoices();
+      const pick = voices.find(v => v.name === voiceSelectEl.value);
+      const u = new SpeechSynthesisUtterance(sample);
+      if (pick) u.voice = pick;
+      u.rate = 1.05;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    });
+
+    document.getElementById('settingsSave').addEventListener('click', () => {
+      commitKeyFields();
+
+      if (elVoiceSelectEl) {
+        const v = elVoiceSelectEl.value || '';
+        if (v) localStorage.setItem(EL_VOICE_KEY, v);
+        else localStorage.removeItem(EL_VOICE_KEY);
+      }
+
+      const prefs = {
+        background: document.getElementById('bgAudioToggle').checked,
+        keepAwake:  document.getElementById('keepAwakeToggle').checked,
+      };
+      localStorage.setItem(BG_AUDIO_KEY, JSON.stringify(prefs));
+      applyKeepAwakePref();
+
+      if (currentUser) {
+        currentUser.preferredVoice = voiceSelectEl.value || null;
+        saveUser(currentUser);
+      }
+      settingsPanelEl.classList.add('hidden');
+    });
+
+    // ─── Research logging (only fires if consented) ───────────────────
+    async function logResearchSnapshot() {
+      if (!currentUser?.consentResearch) return;
+      if (!currentHistory || currentHistory.length === 0) return;
+      try {
+        await fetch('/api/research-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversation: currentHistory,
+            userContext: {
+              userId: currentUser.userId,
+              name: currentUser.name,
+              consentDate: currentUser.consentDate,
+              researchTag: 'general'
+            },
+            consentResearch: true
+          })
+        });
+      } catch (e) { /* silent — don't disrupt UX */ }
+    }
+    // Periodic save of consented sessions (every 60 seconds if conversation grew)
+    let lastLoggedLength = 0;
+    setInterval(() => {
+      if (currentHistory.length > lastLoggedLength) {
+        logResearchSnapshot();
+        lastLoggedLength = currentHistory.length;
+      }
+    }, 60000);
+
+    // ─── App init ─────────────────────────────────────────────────────
+    async function initApp(user) {
+      currentUser = user;
+      currentHistory = loadHistory();
+      refreshChrome();
+
+      localStorage.setItem('thinkinbuddy_user_id', user.userId);
+      localStorage.setItem('thinkinbuddy_user_name', user.name);
+      localStorage.setItem('thinkinbuddy_buddy_name', user.buddyName || 'ThinkinBuddy');
+
+      const buddyName = user.buddyName || 'ThinkinBuddy';
+
+      // Prime the agent: fetch THIS user's per-session system prompt (built
+      // server-side from their own Blob prefix) and stash it so the widget's
+      // elevenlabs-convai:call handler can apply it as a PER-SESSION override.
+      // We no longer PATCH a shared global agent — that leaked facts across
+      // users (last-writer-wins). userId is the real localStorage ID so each
+      // user reads only their own memories.
+      // Conversational mode — defaults to 'default' (regular buddy).
+      // Activate Spanish tutor mode via ?tutor=1 in the URL, ?mode=spanish_tutor,
+      // or by clicking the in-page "Spanish Tutor" toggle (which persists to
+      // localStorage). buildSystemPrompt appends the tutor block when mode=spanish_tutor.
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlMode = urlParams.get('mode');
+      const urlTutor = urlParams.get('tutor');
+      const storedMode = localStorage.getItem('thinkinbuddy_mode_v1');
+      let activeMode = 'default';
+      if (urlMode === 'spanish_tutor' || urlTutor === '1') activeMode = 'spanish_tutor';
+      else if (storedMode === 'spanish_tutor') activeMode = 'spanish_tutor';
+      else if (urlMode === 'feynman_module1' || urlParams.get('feynman') === '1') activeMode = 'feynman_module1';
+      else if (storedMode === 'feynman_module1') activeMode = 'feynman_module1';
+      window.thinkinBuddyMode = activeMode;
+      console.log('[ThinkinBuddy] active mode:', activeMode);
+
+      sessionPromptOverride = null;
+      try {
+        const primeRes = await fetch('/api/prime-agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            buddyName,
+            userName: user.name,
+            userId: user.userId,
+            mode: activeMode,
+          }),
+        });
+        const p = await primeRes.json();
+        if (p?.ok && typeof p.prompt === 'string') {
+          sessionPromptOverride = p.prompt;
+        }
+        console.log('[ThinkinBuddy] primed — memories:', p.memoryCount, 'buddy:', p.buddyName, 'user:', p.userId, 'promptLen:', sessionPromptOverride?.length || 0);
+      } catch (e) { console.warn('[ThinkinBuddy] prime failed', e); }
+
+      // Create widget after agent is primed
+      const mount = document.getElementById('widget-mount');
+      if (mount) {
+        const widget = document.createElement('elevenlabs-convai');
+        widget.setAttribute('id', 'convai-widget');
+        widget.setAttribute('agent-id', 'agent_4401kqcb0w2dey28c69zhchv7ayn');
+        mount.appendChild(widget);
+      }
+      document.body.classList.add('elevenlabs-mode');
+
+      // Mark first visit done
+      if (user.firstVisit) {
+        user.firstVisit = false;
+        saveUser(user);
+      }
+    }
+
+    // ─── Media display ───────────────────────────────────────────────
+    // Poll for new images/videos generated during a conversation. Image and
+    // video share #mediaArea — showing one hides the other so the orb area
+    // doesn't get crowded.
+    let lastMediaCheck = 0;
+    function showMedia(url, caption) {
+      const area = document.getElementById('mediaArea');
+      const img = document.getElementById('mediaImg');
+      const vid = document.getElementById('mediaVideo');
+      const cap = document.getElementById('mediaCaption');
+      if (!area || !img) return;
+      if (vid) { try { vid.pause(); } catch {} vid.style.display = 'none'; vid.src = ''; }
+      img.src = url;
+      img.style.display = 'block';
+      area.style.display = 'flex';
+      area.style.flexDirection = 'column';
+      area.style.alignItems = 'center';
+      if (cap) cap.textContent = '';
+    }
+
+    function showVideo(url, caption) {
+      const area = document.getElementById('mediaArea');
+      const img = document.getElementById('mediaImg');
+      const vid = document.getElementById('mediaVideo');
+      const cap = document.getElementById('mediaCaption');
+      const btn = document.getElementById('mediaCloseBtn');
+      if (!area || !vid) return;
+      if (img) { img.style.display = 'none'; img.src = ''; }
+      vid.src = url;
+      // Fullscreen overlay
+      area.style.cssText = 'display:flex; position:fixed; inset:0; width:100vw; height:100vh; max-width:none; margin:0; padding:0; z-index:50; background:#000; align-items:center; justify-content:center;';
+      vid.style.cssText = 'display:block; width:100vw; height:100vh; object-fit:contain; border-radius:0; border:none; background:#000;';
+      if (btn) btn.style.cssText = 'position:fixed; top:16px; right:16px; width:44px; height:44px; border-radius:50%; border:1px solid rgba(0,212,255,0.6); background:rgba(0,0,0,0.85); color:#00d4ff; font-size:1.2rem; font-family:monospace; cursor:pointer; z-index:51; display:flex; align-items:center; justify-content:center; padding:0;';
+      try { vid.play().catch(() => {}); } catch {}
+      if (cap) cap.textContent = '';
+    }
+
+    function hideMedia() {
+      const area = document.getElementById('mediaArea');
+      const img = document.getElementById('mediaImg');
+      const vid = document.getElementById('mediaVideo');
+      const cap = document.getElementById('mediaCaption');
+      const btn = document.getElementById('mediaCloseBtn');
+      if (area) area.style.cssText = 'display:none; z-index:2; max-width:340px; width:90%; margin-top:20px; position:relative;';
+      if (img) { img.style.display = 'none'; img.src = ''; }
+      if (vid) { try { vid.pause(); } catch {} vid.style.cssText = 'width:100%; border-radius:12px; border:1px solid rgba(0,212,255,0.3); display:none;'; vid.src = ''; }
+      if (btn) btn.style.cssText = 'position:absolute; top:-10px; right:-10px; width:32px; height:32px; border-radius:50%; border:1px solid rgba(0,212,255,0.5); background:rgba(0,0,0,0.85); color:#00d4ff; font-size:1rem; font-family:monospace; cursor:pointer; z-index:3; display:flex; align-items:center; justify-content:center; padding:0;';
+      if (cap) cap.textContent = '';
+    }
+
+    document.getElementById('mediaCloseBtn')?.addEventListener('click', hideMedia);
+
+    // ─── Boot ─────────────────────────────────────────────────────────
+    const existingUser = loadUser();
+    if (!existingUser) {
+      showOnboarding();
+    } else {
+      initApp(existingUser);
+    }
+
+    // ─── Browser voice mode (multi-tenant aware) ──────────────────────
+    function initBrowserVoice() {
+      const orb = document.getElementById('orb');
+      const statusEl = document.getElementById('status');
+      const transcriptEl = document.getElementById('transcript');
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        setStatus('BROWSER NOT SUPPORTED — USE CHROME', '');
+        return;
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      let isListening = false;
+      let isSpeaking = false;
+      let sessionActive = false;
+
+      const synth = window.speechSynthesis;
+
+      function setStatus(text, state) {
+        statusEl.textContent = text;
+        statusEl.className = 'status' + (state ? ' ' + state : '');
+        orb.className = 'orb' + (state ? ' ' + state : '');
+      }
+
+      function speak(text, onDone) {
+        synth.cancel();
+        const clean = text.replace(/\[ACTION:[^\]]+\]/g, '').trim();
+        if (!clean) { onDone?.(); return; }
+
+        const utter = new SpeechSynthesisUtterance(clean);
+        utter.lang = 'en-US';
+        utter.rate = 1.05;
+        utter.pitch = 1.0;
+
+        const voices = synth.getVoices();
+        // First check user-saved preference
+        const preferred = currentUser?.preferredVoice
+          ? voices.find(v => v.name === currentUser.preferredVoice)
+          : null;
+        const pick = preferred
+          || voices.find(v => v.name === 'Google UK English Male')
+          || voices.find(v => v.name.includes('Male') && v.lang.startsWith('en'))
+          || voices.find(v => v.name === 'Microsoft David - English (United States)')
+          || voices.find(v => v.name.includes('David'))
+          || voices.find(v => v.name === 'Google US English')
+          || voices.find(v => v.lang.startsWith('en') && !v.localService)
+          || voices.find(v => v.lang.startsWith('en'));
+        if (pick) utter.voice = pick;
+
+        isSpeaking = true;
+        setStatus('THINKINBUDDY SPEAKING', 'speaking');
+        utter.onend = () => {
+          isSpeaking = false;
+          try { recognition.stop(); } catch(e) {}
+          onDone?.();
+        };
+        utter.onerror = () => { isSpeaking = false; onDone?.(); };
+        try { recognition.stop(); } catch(e) {}
+        synth.speak(utter);
+      }
+
+      function stopSpeaking() {
+        synth.cancel();
+        isSpeaking = false;
+      }
+
+      function handleActions(text) {
+        const actionMatch = text.match(/\[ACTION:(CALL|SMS):([^\]]+)\]/g);
+        if (!actionMatch) return;
+        actionMatch.forEach(action => {
+          const m = action.match(/\[ACTION:(CALL|SMS):([^\]]+)\]/);
+          if (!m) return;
+          const [, type, params] = m;
+          if (type === 'CALL') {
+            window.location.href = 'tel:' + params.replace(/\s/g, '');
+          } else if (type === 'SMS') {
+            const [number, ...msgParts] = params.split(':');
+            const msg = msgParts.join(':');
+            window.location.href = 'sms:' + number.trim() + (msg ? '?body=' + encodeURIComponent(msg) : '');
+          }
+        });
+      }
+
+      function startListening() {
+        if (isListening || isSpeaking) return;
+        try { recognition.start(); } catch(e) {}
+      }
+
+      // ─── THE HELMION RELAY, BAKED IN ─────────────────────────────────────
+      // Troy has no practical way to read a 90-character URL and a 43-character
+      // key out loud to the buddy, and should not have to. The address lives in
+      // the app instead, so the relay is just there.
+      //
+      // WHAT CROSSES IT: TEXT. Nothing else. There is no command, no path, no
+      // shell string, and the desktop end (src/relay/protocol.mjs) drops any
+      // frame kind it does not recognise rather than forwarding it. A line sent
+      // here becomes a line Helmion SHOWS. Letting the phone actually RUN
+      // anything is a separate, deliberate decision that has not been made.
+      // NO KEY IN HERE, DELIBERATELY. The first cut inlined the relay URL and
+      // its key so the buddy simply had them. That works and it publishes a live
+      // credential on a public page — anyone viewing source could send text to
+      // Troy's Helmion. It goes through /api/relay-proxy instead, which holds
+      // the secret server-side and fixes the channel and role so a browser
+      // cannot claim to be the desktop.
+      let relayCursor = null;
+
+      // Send one line to the desktop. Never throws — offline is normal in a car
+      // and the conversation has to carry on regardless.
+      async function relaySend(text) {
+        const body = String(text || '').trim();
+        if (!body || body.length > 4000) return;
+        try {
+          await fetch('/api/relay-proxy', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ body }),   // the field is `body`, not `text`
+          });
+        } catch (e) {}
+      }
+
+      // Poll for anything the desktop said. since=0 means "just woke up" and
+      // deliberately returns no history — it hands back a cursor to read from.
+      async function relayPoll() {
+        try {
+          const r = await fetch(`/api/relay-proxy?since=${relayCursor ?? 0}`);
+          if (!r.ok) return;
+          const d = await r.json();
+          if (typeof d.cursor === 'number') relayCursor = d.cursor;
+          for (const m of d.messages || []) {
+            if (m.from !== 'desktop') continue;
+            transcriptEl.textContent = 'Helmion: ' + m.body;
+            speak(m.body);
+          }
+        } catch (e) {}
+      }
+      setInterval(() => { if (sessionActive) relayPoll(); }, 4000);
+
+      async function sendToThinkinBuddy(userText) {
+        currentHistory.push({ role: 'user', content: userText });
+        saveHistory(currentHistory);
+        setStatus('THINKING...', 'thinking');
+        transcriptEl.textContent = '';
+
+        // Everything Troy says also reaches the desktop. Fire and forget — the
+        // buddy must never wait on the relay to answer him.
+        relaySend(userText);
+
+        try {
+          const res = await fetch(CONFIG.apiEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: currentHistory,
+              userContext: {
+                userId: currentUser?.userId,
+                name: currentUser?.name,
+                notes: currentUser?.notes || [],
+                firstVisit: currentUser?.firstVisit || false
+              }
+            })
+          });
+          const data = await res.json();
+          const reply = data.reply || 'Sorry, I had trouble with that.';
+          currentHistory.push({ role: 'assistant', content: reply });
+          saveHistory(currentHistory);
+          handleActions(reply);
+          speak(reply, () => {
+            if (sessionActive) startListening();
+          });
+        } catch (e) {
+          speak('Connection error.', () => { if (sessionActive) startListening(); });
+        }
+      }
+
+      recognition.onstart = () => { isListening = true; setStatus('LISTENING...', 'listening'); transcriptEl.textContent = ''; };
+      // ANDROID PAUSES SPEECH WHEN THE SCREEN GOES OFF, and it does it quietly.
+      // Chrome on Android suspends speechSynthesis the moment the page is
+      // backgrounded, mid-sentence, with no event. The utterance is not cancelled
+      // — it is frozen — so calling resume() puts it straight back. Poll it while
+      // a session is live and the buddy keeps talking in Troy's pocket.
+      //
+      // Cheap on purpose: it does nothing at all unless a session is running AND
+      // the engine reports itself paused, so it is not a timer burning battery in
+      // the background for nothing.
+      setInterval(() => {
+        if (!sessionActive) return;
+        try { if (synth.paused) synth.resume(); } catch (e) {}
+      }, 3000);
+
+      recognition.onend = () => {
+        isListening = false;
+        if (sessionActive && !isSpeaking) setTimeout(startListening, 800);
+      };
+      recognition.onerror = (e) => {
+        isListening = false;
+        if (e.error === 'not-allowed') { sessionActive = false; setStatus('TAP TO START', ''); }
+        else if (sessionActive && !isSpeaking) startListening();
+      };
+
+      recognition.onresult = (e) => {
+        let interim = '', final = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) final += e.results[i][0].transcript;
+          else interim += e.results[i][0].transcript;
+        }
+        transcriptEl.textContent = final || interim;
+        if (final) sendToThinkinBuddy(final.trim());
+      };
+
+      // ─── POCKET MODE ─────────────────────────────────────────────────────
+      // Troy: "set ThinkinBuddy up just like Spotify." Lock the screen, put the
+      // phone in your pocket, keep talking.
+      //
+      // WHY IT NEEDED ANYTHING AT ALL. This app speaks with speechSynthesis, and
+      // every mobile browser suspends that the moment the page is backgrounded —
+      // it is treated as page activity, not as media. Nothing here had ever told
+      // the OS this app plays audio, so locking the screen killed the
+      // conversation. pocket-mode.js declares it as a media app with a silent
+      // keeper track, which is the documented way to be kept alive, and puts a
+      // real card with working controls on the lock screen.
+      //
+      // ARMED FROM THE ORB TAP ON PURPOSE. Browsers refuse to start audio without
+      // a genuine user gesture, so arming it anywhere else would fail silently —
+      // and a pocket mode that quietly did not arm is exactly the class of lie
+      // this project keeps finding.
+      // INLINED, NOT IMPORTED, and that is the whole reason this works.
+      // The first cut lived in lib/pocket-mode.js and was loaded with a dynamic
+      // import. Vite bundles from the script tags in this file and does not copy
+      // that folder, so the deployed site answered 404 for it — the import would
+      // have failed on Troy's phone and pocket mode would have been silently off
+      // while looking shipped. Caught by fetching the URL after deploying rather
+      // than assuming. It stays inline so it cannot go missing again.
+      const SILENT_WAV = 'data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQ4AAAAAAAAAAAAAAAAAAAAAAA==';
+      let pocketKeeper = null, pocketWakeLock = null, pocketOn = false;
+
+      async function armPocketMode() {
+        try {
+          if (!pocketKeeper) {
+            pocketKeeper = new Audio(SILENT_WAV);
+            pocketKeeper.loop = true;
+            // 0.0001 and not 0: some browsers do not count a muted element as
+            // playing, and "playing audio" is the only thing that keeps the app
+            // alive with the screen off.
+            pocketKeeper.volume = 0.0001;
+            pocketKeeper.setAttribute('playsinline', '');
+          }
+          await pocketKeeper.play();
+          pocketOn = true;
+
+          if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+              title: 'Talking with ' + (currentUser?.buddyName || 'Mark'),
+              artist: 'ThinkinBuddy',
+              album: 'ThinkinBuddy',
+            });
+            navigator.mediaSession.playbackState = 'playing';
+            // Wired to the real conversation. A lock-screen button that does
+            // nothing is worse than no button.
+            navigator.mediaSession.setActionHandler('play', () => { if (!sessionActive) orb.click(); });
+            navigator.mediaSession.setActionHandler('pause', () => { if (sessionActive) orb.click(); });
+          }
+
+          if ('wakeLock' in navigator && !pocketWakeLock) {
+            try {
+              pocketWakeLock = await navigator.wakeLock.request('screen');
+              pocketWakeLock.addEventListener('release', () => { pocketWakeLock = null; });
+            } catch (e) { /* refused is fine — the audio path is what matters */ }
+          }
+          return true;
+        } catch (err) {
+          // Surfaced, never swallowed. A pocket mode that quietly failed to arm
+          // is the exact defect this project keeps finding.
+          setStatus('POCKET MODE OFF — ' + err.message, '');
+          return false;
+        }
+      }
+
+      function disarmPocketMode() {
+        try { pocketKeeper?.pause(); } catch (e) {}
+        pocketOn = false;
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+        try { pocketWakeLock?.release(); } catch (e) {}
+        pocketWakeLock = null;
+      }
+
+      // A wake lock is dropped by the OS on lock, by design. Retake it only if a
+      // conversation is still meant to be running — never hold one idle.
+      document.addEventListener('visibilitychange', async () => {
+        if (document.visibilityState === 'visible' && pocketOn && 'wakeLock' in navigator && !pocketWakeLock) {
+          try {
+            pocketWakeLock = await navigator.wakeLock.request('screen');
+            pocketWakeLock.addEventListener('release', () => { pocketWakeLock = null; });
+          } catch (e) {}
+        }
+      });
+
+      orb.addEventListener('click', () => {
+        if (isSpeaking) {
+          stopSpeaking();
+          if (sessionActive) startListening();
+          return;
+        }
+        if (!sessionActive) {
+          sessionActive = true;
+          setStatus('SESSION ON — TAP TO END', 'active');
+          armPocketMode();
+          startListening();
+        } else {
+          sessionActive = false;
+          recognition.stop();
+          stopSpeaking();
+          disarmPocketMode();
+          // Keep history in localStorage; don't wipe on session end
+          setStatus('TAP TO START', '');
+          transcriptEl.textContent = '';
+          // Final research snapshot for consented users
+          logResearchSnapshot();
+        }
+      });
+
+      synth.onvoiceschanged = () => synth.getVoices();
+    }
+  </script>
+
+  <script>
+    // ─── Media Gallery ───────────────────────────────────────────────
+    // Fetches all past media from /api/media-gallery, renders a grid,
+    // supports semantic search (cosine recall via pgvector), and opens
+    // a lightbox on click.  Opened via the ◫ Gallery button.
+
+    const galleryPanelEl     = document.getElementById('galleryPanel');
+    const galleryGridEl      = document.getElementById('galleryGrid');
+    const galleryEmptyEl     = document.getElementById('galleryEmpty');
+    const gallerySearchEl    = document.getElementById('gallerySearch');
+    const galleryFilterEl    = document.getElementById('galleryFilter');
+    const galleryBtnEl       = document.getElementById('galleryBtn');
+    const galleryCloseEl     = document.getElementById('galleryClose');
+    const galleryLightboxEl  = document.getElementById('galleryLightbox');
+    const galleryLbImg       = document.getElementById('galleryLightboxImg');
+    const galleryLbVideo     = document.getElementById('galleryLightboxVideo');
+    const galleryLbCaption   = document.getElementById('galleryLightboxCaption');
+    const galleryLbCloseEl   = document.getElementById('galleryLightboxClose');
+
+    let gallerySearchTimer = null;
+
+    // ── Open / close gallery panel ─────────────────────────────────
+    function openGallery() {
+      galleryPanelEl.classList.remove('hidden');
+      loadGallery();
+    }
+    function closeGallery() {
+      galleryPanelEl.classList.add('hidden');
+    }
+
+    galleryBtnEl.addEventListener('click', openGallery);
+    galleryCloseEl.addEventListener('click', closeGallery);
+
+    // ── Fetch + render ─────────────────────────────────────────────
+    async function loadGallery(query) {
+      const userId = currentUser?.userId;
+      if (!userId) {
+        galleryEmptyEl.style.display = 'block';
+        galleryEmptyEl.textContent = 'Sign in first to see your gallery.';
+        return;
+      }
+
+      const type    = galleryFilterEl.value || 'all';
+      const limit   = 60;
+      const params  = new URLSearchParams({ userId, limit, type });
+      if (query) params.set('query', query);
+
+      let items = [];
+      try {
+        const res = await fetch(`/api/media-gallery?${params}`);
+        const data = await res.json();
+        items = data?.items || [];
+      } catch (e) {
+        console.warn('[gallery] fetch failed:', e);
+      }
+
+      renderGallery(items, query);
+    }
+
+    function renderGallery(items, query) {
+      // Remove previous item nodes (keep the empty placeholder)
+      Array.from(galleryGridEl.querySelectorAll('.gallery-item')).forEach(n => n.remove());
+
+      if (!items.length) {
+        galleryEmptyEl.style.display = 'block';
+        galleryEmptyEl.textContent = query
+          ? `No media found matching "${query}".`
+          : 'No media yet — ask Mark to generate an image or video.';
+        return;
+      }
+
+      galleryEmptyEl.style.display = 'none';
+
+      for (const item of items) {
+        const el    = document.createElement('div');
+        el.className = 'gallery-item';
+        el.dataset.url     = item.blobUrl || '';
+        el.dataset.type    = item.type || 'image';
+        el.dataset.caption = item.caption || '';
+
+        // Badge
+        const badge = document.createElement('div');
+        badge.className = 'gallery-item-badge';
+        badge.textContent = item.type === 'video' ? '▶ video' : '⬜ image';
+        el.appendChild(badge);
+
+        // Thumbnail
+        if (item.type === 'video') {
+          const vid = document.createElement('video');
+          vid.src = item.blobUrl || '';
+          vid.muted = true;
+          vid.preload = 'metadata';
+          // Pause at first frame as poster substitute
+          vid.addEventListener('loadedmetadata', () => { vid.currentTime = 0.1; });
+          el.appendChild(vid);
+        } else {
+          const img = document.createElement('img');
+          img.src = item.blobUrl || '';
+          img.alt = item.caption || 'Generated image';
+          img.loading = 'lazy';
+          el.appendChild(img);
+        }
+
+        // Caption
+        const cap = document.createElement('div');
+        cap.className = 'gallery-item-caption';
+        cap.textContent = item.caption || '';
+        el.appendChild(cap);
+
+        el.addEventListener('click', () => openLightbox(item));
+
+        galleryGridEl.appendChild(el);
+      }
+    }
+
+    // ── Search (debounced, 500ms) ──────────────────────────────────
+    gallerySearchEl.addEventListener('input', () => {
+      clearTimeout(gallerySearchTimer);
+      gallerySearchTimer = setTimeout(() => {
+        const q = gallerySearchEl.value.trim();
+        loadGallery(q || undefined);
+      }, 500);
+    });
+
+    galleryFilterEl.addEventListener('change', () => {
+      const q = gallerySearchEl.value.trim();
+      loadGallery(q || undefined);
+    });
+
+    // ── Lightbox ──────────────────────────────────────────────────
+    function openLightbox(item) {
+      galleryLbImg.style.display   = 'none';
+      galleryLbVideo.style.display = 'none';
+      galleryLbImg.src             = '';
+      try { galleryLbVideo.pause(); } catch {}
+      galleryLbVideo.src           = '';
+
+      if (item.type === 'video') {
+        galleryLbVideo.src = item.blobUrl || '';
+        galleryLbVideo.style.display = 'block';
+        try { galleryLbVideo.play().catch(() => {}); } catch {}
+      } else {
+        galleryLbImg.src = item.blobUrl || '';
+        galleryLbImg.alt = item.caption || '';
+        galleryLbImg.style.display = 'block';
+      }
+
+      galleryLbCaption.textContent = item.caption || '';
+      galleryLightboxEl.classList.remove('hidden');
+    }
+
+    function closeLightbox() {
+      galleryLightboxEl.classList.add('hidden');
+      try { galleryLbVideo.pause(); } catch {}
+      galleryLbVideo.src = '';
+      galleryLbImg.src   = '';
+    }
+
+    galleryLbCloseEl.addEventListener('click', closeLightbox);
+    galleryLightboxEl.addEventListener('click', (e) => {
+      if (e.target === galleryLightboxEl) closeLightbox();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (!galleryLightboxEl.classList.contains('hidden')) { closeLightbox(); return; }
+        if (!galleryPanelEl.classList.contains('hidden'))    { closeGallery(); }
+      }
+    });
+
+    // Re-load gallery when a new image or video is shown to the user, so it
+    // appears in the gallery immediately (only if the panel is already open).
+    const _origShowMedia = typeof showMedia === 'function' ? showMedia : null;
+    const _origShowVideo = typeof showVideo === 'function' ? showVideo : null;
+    // Intercept via event — simpler than wrapping and avoids hoisting issues.
+    // The pollers call showMedia/showVideo directly so we hook at render time.
+    function refreshGalleryIfOpen() {
+      if (!galleryPanelEl.classList.contains('hidden')) {
+        const q = gallerySearchEl.value.trim();
+        loadGallery(q || undefined);
+      }
+    }
+    // Observe mediaArea visibility changes as a proxy for new media arriving
+    if (window.MutationObserver && document.getElementById('mediaArea')) {
+      const mo = new MutationObserver(() => refreshGalleryIfOpen());
+      mo.observe(document.getElementById('mediaArea'), { attributes: true, attributeFilter: ['style'] });
+    }
+  </script>
+</body>
+</html>
