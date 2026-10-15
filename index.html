@@ -266,6 +266,10 @@
       border-radius: 3px; outline: none; margin-bottom: 4px;
     }
     .settings-panel input:focus { border-color: rgba(0,212,255,0.7); }
+    .brain-pick { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 12px; }
+    .brain-opt { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #d1d5db; cursor: pointer; }
+    .brain-opt input { width: auto; margin: 0; }
+
     .key-field { margin-bottom: 14px; }
     .key-field .key-head {
       display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;
@@ -535,7 +539,9 @@
       <input type="checkbox" id="onboardConsent" />
       <label for="onboardConsent">I'm okay with anonymized conversations being saved to help improve this app. I can opt out anytime.</label>
     </div>
+    <p style="margin-top:14px;font-size:0.75rem;color:#9ca3af;">Uses Free Gemini for text tools unless you add your own key later in Settings → Your AI.</p>
     <button id="onboardSubmit">Let's go</button>
+    <button type="button" id="onboardOwnKey" style="margin-top:8px;background:transparent;border:1px solid rgba(0,212,255,0.35);color:#00d4ff;font-family:monospace;padding:10px 18px;border-radius:8px;cursor:pointer;width:100%;">Use my own key…</button>
   </div>
 
   <!-- Background corners + title -->
@@ -613,7 +619,7 @@
     <h2>Settings</h2>
 
     <div class="tabs">
-      <button data-tab="keys"  class="active">Keys</button>
+      <button data-tab="keys"  class="active">Your AI</button>
       <button data-tab="voice">Voice</button>
       <button data-tab="audio">Audio</button>
     </div>
@@ -622,14 +628,21 @@
       <!-- ── KEYS ─────────────────────────────────────────────────── -->
       <div class="tab-pane active" data-pane="keys">
         <div class="storage-note">
-          Keys are saved <strong>only in this browser's localStorage, on this
-          device</strong>. They are never written to a server, never logged, and
-          never included in analytics. Each key is sent only to this app's own
-          <strong>/api</strong> route for the provider it belongs to, over HTTPS,
-          as a request header. Clearing your browser data deletes them.
-          Leave a field blank to use the key configured on the server instead.
+          Pick a <strong>brain</strong> for text tools (chat, search, browse, memory extract).
+          Voice still uses Mark on ElevenLabs. Free Gemini needs no key (shared app key, rate-limited).
+          Your own keys stay in <strong>this browser only</strong> and are sent only to our /api routes.
         </div>
+        <div class="brain-pick" id="brainPick">
+          <label class="brain-opt"><input type="radio" name="brain" value="gemini" checked /> Free (Gemini)</label>
+          <label class="brain-opt"><input type="radio" name="brain" value="openai" /> OpenAI</label>
+          <label class="brain-opt"><input type="radio" name="brain" value="anthropic" /> Anthropic Claude</label>
+          <label class="brain-opt"><input type="radio" name="brain" value="xai" /> xAI Grok</label>
+        </div>
+        <label for="brainModel">Model (optional)</label>
+        <input type="text" id="brainModel" placeholder="default for provider" autocomplete="off" spellcheck="false" />
+        <div class="test-line" id="brainTestLine">Leave model blank for the recommended default.</div>
         <div id="keyFields"></div>
+        <div class="test-line" id="aiKeyTestResult"></div>
       </div>
 
       <!-- ── VOICE ────────────────────────────────────────────────── -->
@@ -1019,6 +1032,14 @@
       setTimeout(() => onboardNameEl.focus(), 100);
     }
     function hideOnboarding() { onboardingEl.classList.add('hidden'); }
+    document.getElementById('onboardOwnKey')?.addEventListener('click', () => {
+      document.getElementById('onboardSubmit')?.click();
+      setTimeout(() => {
+        document.getElementById('settingsPill')?.click();
+        settingsPanelEl?.querySelector('.tabs button[data-tab="keys"]')?.click();
+      }, 80);
+    });
+
 
     onboardSubmitEl.addEventListener('click', completeOnboarding);
     onboardNameEl.addEventListener('keydown', (e) => {
@@ -1505,14 +1526,18 @@
     // process.env var — verified by grep over api/ and lib/, not guessed.
     const KEYS_STORAGE = 'thinkbuddy_keys_v1';
     const KEY_SPECS = [
+      { id: 'GEMINI_API_KEY',     label: 'Gemini (optional)', hint: 'AIza…',
+        usedBy: 'your own Gemini key; leave blank to use the free shared key', brain: 'gemini' },
       { id: 'OPENAI_API_KEY',     label: 'OpenAI',      hint: 'sk-…',
-        usedBy: 'image generation (gpt-image-2), chat, search, browse, video' },
+        usedBy: 'brain, images, video, chat tools', brain: 'openai' },
       { id: 'ANTHROPIC_API_KEY',  label: 'Anthropic',   hint: 'sk-ant-…',
-        usedBy: 'text chat, memory extraction, diary' },
+        usedBy: 'brain, diary, memory extract', brain: 'anthropic' },
+      { id: 'XAI_API_KEY',        label: 'xAI Grok',    hint: 'xai-…',
+        usedBy: 'brain (Grok)', brain: 'xai' },
       { id: 'ELEVENLABS_API_KEY', label: 'ElevenLabs',  hint: 'sk_…',
         usedBy: 'voice list, speak endpoint, transcript fetch' },
-      { id: 'GOOGLE_API_KEY',     label: 'Google',      hint: 'AIza…',
-        usedBy: 'Imagen image generation' },
+      { id: 'GOOGLE_API_KEY',     label: 'Google Imagen', hint: 'AIza…',
+        usedBy: 'Imagen image generation (not the free Gemini brain)' },
       { id: 'REPLICATE_API_TOKEN',label: 'Replicate',   hint: 'r8_…',
         usedBy: 'Flux image generation' },
       { id: 'RUNWAY_API_KEY',     label: 'Runway',      hint: 'key_…',
@@ -1520,6 +1545,23 @@
       { id: 'HEYGEN_API_KEY',     label: 'HeyGen',      hint: '',
         usedBy: 'avatar video generation' },
     ];
+    const BRAIN_STORAGE = 'thinkbuddy_brain_v1';
+    const MODEL_STORAGE = 'thinkbuddy_brain_model_v1';
+    const BRAIN_DEFAULTS = {
+      gemini: 'gemini-3.5-flash-lite',
+      openai: 'gpt-4.1-mini',
+      anthropic: 'claude-haiku-4-5',
+      xai: 'grok-3-mini',
+    };
+    function loadBrain() {
+      try {
+        const b = localStorage.getItem(BRAIN_STORAGE) || 'gemini';
+        return ['gemini','openai','anthropic','xai'].includes(b) ? b : 'gemini';
+      } catch (e) { return 'gemini'; }
+    }
+    function saveBrain(b) { localStorage.setItem(BRAIN_STORAGE, b); }
+    function loadBrainModel() { try { return localStorage.getItem(MODEL_STORAGE) || ''; } catch (e) { return ''; } }
+    function saveBrainModel(m) { localStorage.setItem(MODEL_STORAGE, m || ''); }
 
     function loadKeys() {
       try { return JSON.parse(localStorage.getItem(KEYS_STORAGE) || '{}'); }
@@ -1615,15 +1657,17 @@
     //      per file), so e.g. the OpenAI key is never sent to /api/voices.
     //
     // Anything not listed gets no key headers — deny by default.
+    const TEXT_BRAIN_KEYS = ['GEMINI_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'XAI_API_KEY'];
     const ROUTE_PROVIDERS = {
       'voices':            ['ELEVENLABS_API_KEY'],
       'speak':             ['ELEVENLABS_API_KEY'],
-      'extract-memories':  ['ELEVENLABS_API_KEY', 'ANTHROPIC_API_KEY'],
-      'chat':              ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
-      'search':            ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
-      'browse':            ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
-      'diary':             ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
-      'memory':            ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
+      'ai-test':           TEXT_BRAIN_KEYS,
+      'extract-memories':  ['ELEVENLABS_API_KEY'].concat(TEXT_BRAIN_KEYS),
+      'chat':              TEXT_BRAIN_KEYS,
+      'search':            TEXT_BRAIN_KEYS,
+      'browse':            TEXT_BRAIN_KEYS,
+      'diary':             ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'].concat(TEXT_BRAIN_KEYS),
+      'memory':            TEXT_BRAIN_KEYS,
       'image':             ['OPENAI_API_KEY'],
       'image-flux':        ['REPLICATE_API_TOKEN', 'OPENAI_API_KEY'],
       'image-imagen':      ['GOOGLE_API_KEY', 'OPENAI_API_KEY'],
@@ -1644,6 +1688,11 @@
       for (const envVar of allowed) {
         const v = keys[envVar];
         if (v) headers[`X-User-Key-${envVar.replace(/_API_KEY$|_API_TOKEN$/, '')}`] = v;
+      }
+      if (TEXT_BRAIN_KEYS.some(k => allowed.includes(k))) {
+        headers['X-User-Brain'] = loadBrain();
+        const model = loadBrainModel();
+        if (model) headers['X-User-Model'] = model;
       }
       return fetch(url, { ...opts, headers });
     }
@@ -1726,8 +1775,38 @@
       });
     });
 
+    function syncBrainUi() {
+      const brain = loadBrain();
+      document.querySelectorAll('input[name="brain"]').forEach(r => { r.checked = r.value === brain; });
+      const modelEl = document.getElementById('brainModel');
+      if (modelEl) {
+        modelEl.value = loadBrainModel();
+        modelEl.placeholder = BRAIN_DEFAULTS[brain] || '';
+      }
+      const line = document.getElementById('brainTestLine');
+      if (line) {
+        line.textContent = brain === 'gemini'
+          ? 'Free Gemini uses the app key. Paste your own only if you want to.'
+          : 'Paste your ' + brain + ' key below, then Test. Default model: ' + (BRAIN_DEFAULTS[brain] || '—');
+      }
+    }
+    document.querySelectorAll('input[name="brain"]').forEach(r => {
+      r.addEventListener('change', () => {
+        if (!r.checked) return;
+        saveBrain(r.value);
+        syncBrainUi();
+      });
+    });
+    const brainModelEl = document.getElementById('brainModel');
+    if (brainModelEl) {
+      brainModelEl.addEventListener('change', () => {
+        saveBrainModel(brainModelEl.value.trim());
+      });
+    }
+
     document.getElementById('settingsPill').addEventListener('click', () => {
       renderKeyFields();
+      syncBrainUi();
       refreshPillState();
       populateVoices();
       refreshBgAudioStatus();
@@ -1744,6 +1823,29 @@
     // Test speaks with whichever voice the user is currently looking at:
     // an ElevenLabs voice if one is chosen, otherwise the browser voice.
     document.getElementById('settingsTest').addEventListener('click', async () => {
+      const activeTab = settingsPanelEl.querySelector('.tabs button.active')?.dataset?.tab;
+      if (activeTab === 'keys') {
+        commitKeyFields();
+        const brainRadio = document.querySelector('input[name="brain"]:checked');
+        if (brainRadio) saveBrain(brainRadio.value);
+        saveBrainModel(document.getElementById('brainModel')?.value.trim() || '');
+        const out = document.getElementById('aiKeyTestResult');
+        if (out) out.textContent = 'Testing…';
+        try {
+          const res = await apiFetch('/api/ai-test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: loadBrain() }),
+          });
+          const data = await res.json();
+          if (out) out.textContent = data.ok
+            ? ('Works (' + data.provider + '): ' + (data.reply || 'OK'))
+            : ('Failed: ' + (data.error || res.status));
+        } catch (e) {
+          if (out) out.textContent = 'Could not reach /api/ai-test.';
+        }
+        return;
+      }
       const sample = "Hi, I'm ThinkinBuddy. This is what I sound like.";
       const elVoiceId = elVoiceSelectEl?.value || '';
 
@@ -1785,6 +1887,9 @@
     });
 
     document.getElementById('settingsSave').addEventListener('click', () => {
+      const brainRadio = document.querySelector('input[name="brain"]:checked');
+      if (brainRadio) saveBrain(brainRadio.value);
+      saveBrainModel(document.getElementById('brainModel')?.value.trim() || '');
       commitKeyFields();
 
       if (elVoiceSelectEl) {

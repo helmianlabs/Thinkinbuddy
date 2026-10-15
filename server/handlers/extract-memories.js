@@ -89,7 +89,7 @@ async function fetchTranscript(conversationId, elevenKey) {
 // (spec lines 328-341): scope, kind, subject, content, confidence, importance,
 // valid_until, source_session, source_span{start,end}. PII/length filtering is
 // applied here so nothing dirty reaches the persistence layer.
-async function extractCandidates(transcript, conversationId) {
+async function extractCandidates(transcript, conversationId, req) {
   if (!Array.isArray(transcript) || transcript.length === 0) return [];
 
   // Number each line so the LLM can cite source_span message indices, and so the
@@ -106,6 +106,7 @@ async function extractCandidates(transcript, conversationId) {
   if (!numbered) return [];
 
   const text = await completeText({
+    req,
     maxTokens: 1500,
     system: EXTRACT_PROMPT,
     user: numbered,
@@ -179,7 +180,7 @@ function parseCandidates(raw) {
 // spec :360-455). Slice A adds that export to memory.js in parallel; if it isn't
 // available yet, fall back to upsertExtractedFact (one row per candidate, no
 // embedding-based dedup). Returns a normalized summary either way.
-async function persistCandidates(userId, candidates, conversationId) {
+async function persistCandidates(userId, candidates, conversationId, req) {
   let saveMemoryCandidates = null;
   try {
     const mod = await import('./memory.js');
@@ -194,7 +195,7 @@ async function persistCandidates(userId, candidates, conversationId) {
     const pool = getPool();
     // LLM adapter for contradiction classification inside saveMemoryCandidates
     // (spec :457-468). Same Anthropic surface used above.
-    const llm = (system, user) => completeText({ system, user, maxTokens: 16 });
+    const llm = (system, user) => completeText({ req, system, user, maxTokens: 16 });
     const res = await saveMemoryCandidates(pool, userId, candidates, llm);
     return {
       path: 'saveMemoryCandidates',
@@ -240,7 +241,7 @@ export default async function handler(req, res) {
 
   const elevenKey = process.env.ELEVENLABS_API_KEY;
   if (!elevenKey)    return res.status(500).json({ error: 'ELEVENLABS_API_KEY not set' });
-  if (!hasTextLlm()) return res.status(500).json({ error: 'No LLM key: set GEMINI_API_KEY (free) or ANTHROPIC_API_KEY' });
+  if (!hasTextLlm(req)) return res.status(500).json({ error: 'No LLM key. Use Free Gemini, or add a key under Settings → Your AI.' });
 
   try {
     // ElevenLabs sometimes needs a beat to finalize the transcript.
@@ -259,12 +260,12 @@ export default async function handler(req, res) {
       return res.status(425).json({ ok: false, extracted: 0, reason: 'empty transcript' });
     }
 
-    const candidates = await extractCandidates(transcript, conversationId);
+    const candidates = await extractCandidates(transcript, conversationId, req);
     if (candidates.length === 0) {
       return res.status(200).json({ ok: true, extracted: 0, reason: 'no durable facts' });
     }
 
-    const result = await persistCandidates(userId, candidates, conversationId);
+    const result = await persistCandidates(userId, candidates, conversationId, req);
 
     return res.status(200).json({
       ok: true,

@@ -9,6 +9,7 @@ const routes = {
   'actionable-integrations': () => import('../server/handlers/actionable-integrations.js'),
   'actionable-oauth-callback': () => import('../server/handlers/actionable-oauth-callback.js'),
   'actionable-search': () => import('../server/handlers/actionable-search.js'),
+  'ai-test': () => import('../server/handlers/ai-test.js'),
   'alarm': () => import('../server/handlers/alarm.js'),
   'browse': () => import('../server/handlers/browse.js'),
   'chat': () => import('../server/handlers/chat.js'),
