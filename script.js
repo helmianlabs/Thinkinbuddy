@@ -1,6 +1,6 @@
 import { Conversation } from '@elevenlabs/client';
 
-const AGENT_ID = 'agent_4401kqcb0w2dey28c69zhchv7ayn';
+const AGENT_ID = 'agent_5301m50skfnvfza8bpkmjybc18z8';
 
 const statusEl = document.getElementById('status');
 const transcriptEl = document.getElementById('transcript');

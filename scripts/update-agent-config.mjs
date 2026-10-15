@@ -32,9 +32,9 @@ for (const line of readFileSync(new URL('../.env.local', import.meta.url), 'utf8
   if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
 }
 
-const AGENT_ID = 'agent_4401kqcb0w2dey28c69zhchv7ayn';
+const AGENT_ID = 'agent_5301m50skfnvfza8bpkmjybc18z8';
 const SAVE_MEMORY_TOOL_ID = 'tool_5501kt5r8fqyf3xssf9xw0v3fw3y';
-const APP_BASE = process.argv[2] || 'https://thinkinbuddy.vercel.app';
+const APP_BASE = process.argv[2] || 'https://thinkbuddy-sandy.vercel.app';
 const KEY = process.env.ELEVENLABS_API_KEY;
 if (!KEY) { console.error('ELEVENLABS_API_KEY not set'); process.exit(1); }
 

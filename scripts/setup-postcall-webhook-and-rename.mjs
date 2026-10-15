@@ -20,8 +20,8 @@ for (const line of readFileSync(new URL('../.env.local', import.meta.url), 'utf8
   if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
 }
 
-const AGENT_ID = 'agent_4401kqcb0w2dey28c69zhchv7ayn';
-const WEBHOOK_URL = 'https://thinkinbuddy.vercel.app/api/conversation-webhook';
+const AGENT_ID = 'agent_5301m50skfnvfza8bpkmjybc18z8';
+const WEBHOOK_URL = 'https://thinkbuddy-sandy.vercel.app/api/conversation-webhook';
 const KEY = process.env.ELEVENLABS_API_KEY;
 if (!KEY) { console.error('ELEVENLABS_API_KEY not set'); process.exit(1); }
 
