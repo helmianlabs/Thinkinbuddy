@@ -1,7 +1,7 @@
 // scripts/mine-transcripts.mjs
 // ---------------------------------------------------------------------------
 // Mine ALL ElevenLabs (ThinkinBuddy) conversation transcripts for agent
-// agent_4401kqcb0w2dey28c69zhchv7ayn into Troy's live persistent-memory DB
+// agent_5301m50skfnvfza8bpkmjybc18z8 into Troy's live persistent-memory DB
 // (Neon `thinkinbuddy_memory`, table memory_items, user_id='troy').
 //
 // Pipeline (per the task spec + thinkinbuddy/api/extract-memories.js patterns):
@@ -37,7 +37,7 @@
 import { Pool } from 'pg';
 import { readFileSync } from 'fs';
 
-const AGENT_ID = 'agent_4401kqcb0w2dey28c69zhchv7ayn';
+const AGENT_ID = 'agent_5301m50skfnvfza8bpkmjybc18z8';
 const USER_ID = 'troy';
 const SIM_DUP = 0.92;            // >= this cosine similarity → skip as near-duplicate
 const MAX_CONTENT_LEN = 500;
