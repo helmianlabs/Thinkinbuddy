@@ -7,6 +7,7 @@
 import { buildSystemPrompt } from '../../lib/personality.js';
 import { applyBrowserCors, requireBrowserFetch } from '../../lib/security.js';
 import { isAllowed } from '../../lib/moderation.js';
+import { completeText, hasTextLlm } from '../../lib/llm.js';
 
 // Payload ceilings. A single request cannot be made expensive: input tokens are
 // what cost money here (max_tokens caps only the OUTPUT at 400), so an
@@ -59,8 +60,7 @@ export default async function handler(req, res) {
     return res.status(413).json({ error: `conversation too large (max ${MAX_TOTAL_CHARS} characters)` });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ reply: 'Anthropic API key not configured.' });
+  if (!hasTextLlm()) return res.status(500).json({ reply: 'No LLM key: set GEMINI_API_KEY (free) or ANTHROPIC_API_KEY.' });
 
   // Kid-safe gate: moderate the latest user message BEFORE calling Claude.
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
@@ -85,23 +85,19 @@ export default async function handler(req, res) {
   });
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 400,
-        system: systemPrompt,
-        messages,
-      }),
-    });
-
-    const data = await response.json();
-    const reply = data.content?.[0]?.text || 'No response.';
+    const reply = (await completeText({
+      maxTokens: 400,
+      system: systemPrompt,
+      user: messages.map((m) => {
+        const role = m.role === 'assistant' ? 'Buddy' : 'User';
+        const c = typeof m.content === 'string'
+          ? m.content
+          : Array.isArray(m.content)
+            ? m.content.map((b) => (typeof b === 'string' ? b : b?.text || '')).join(' ')
+            : '';
+        return `${role}: ${c}`;
+      }).join('\n\n'),
+    })) || 'No response.';
 
     // If the buddy emitted [ACTION:SAVE_TASK:x], persist it silently.
     const taskMatch = reply.match(/\[ACTION:SAVE_TASK:([^\]]+)\]/);

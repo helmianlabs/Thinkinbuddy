@@ -13,6 +13,7 @@
 import { isSafeUrl, UNSAFE_SITE_MSG } from '../../lib/safeBrowse.js';
 import { isAllowed } from '../../lib/moderation.js';
 import { requireToolAuth } from '../../lib/security.js';
+import { completeText, hasTextLlm } from '../../lib/llm.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -85,29 +86,24 @@ export default async function handler(req, res) {
       return res.status(200).json({ result: UNSAFE_SITE_MSG });
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
+    if (!hasTextLlm()) {
       return res.status(200).json({ result: text.slice(0, 500) });
     }
 
-    // Use Claude to summarize the page content into something speakable
-    const summary = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5',
-        max_tokens: 300,
+    // Summarize with Gemini (free) or Anthropic — speakable aloud
+    let result;
+    try {
+      result = await completeText({
+        maxTokens: 300,
         system: 'Summarize this webpage content in 3-5 conversational sentences as if you just read it. Focus on what the site is about, what it offers, and your honest impression. No bullet points — this will be read aloud.',
-        messages: [{ role: 'user', content: `URL: ${target.toString()}\n\nPage content:\n${text}` }],
-      }),
-    });
+        user: `URL: ${target.toString()}
 
-    const data = await summary.json();
-    const result = data.content?.[0]?.text || text.slice(0, 300);
+Page content:
+${text}`,
+      });
+    } catch {
+      result = text.slice(0, 300);
+    }
 
     return res.status(200).json({ result });
   } catch (err) {

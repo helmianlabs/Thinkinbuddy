@@ -17,6 +17,7 @@
 // Response status is for debugging — the client ignores it.
 
 import { getPool, upsertExtractedFact } from './memory.js';
+import { completeText, hasTextLlm } from '../../lib/llm.js';
 
 // ---------------------------------------------------------------------------
 // PII filter + length cap — verbatim from spec lines 262-278.
@@ -88,7 +89,7 @@ async function fetchTranscript(conversationId, elevenKey) {
 // (spec lines 328-341): scope, kind, subject, content, confidence, importance,
 // valid_until, source_session, source_span{start,end}. PII/length filtering is
 // applied here so nothing dirty reaches the persistence layer.
-async function extractCandidates(transcript, conversationId, anthropicKey) {
+async function extractCandidates(transcript, conversationId) {
   if (!Array.isArray(transcript) || transcript.length === 0) return [];
 
   // Number each line so the LLM can cite source_span message indices, and so the
@@ -104,27 +105,11 @@ async function extractCandidates(transcript, conversationId, anthropicKey) {
 
   if (!numbered) return [];
 
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': anthropicKey,
-      'anthropic-version': '2023-06-01',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5',
-      max_tokens: 1500,
-      system: EXTRACT_PROMPT,
-      messages: [{ role: 'user', content: numbered }],
-    }),
+  const text = await completeText({
+    maxTokens: 1500,
+    system: EXTRACT_PROMPT,
+    user: numbered,
   });
-
-  if (!r.ok) {
-    const body = await r.text();
-    throw new Error(`Anthropic ${r.status}: ${body.slice(0, 200)}`);
-  }
-  const data = await r.json();
-  const text = data?.content?.[0]?.text || '';
 
   const parsed = parseCandidates(text);
   if (!Array.isArray(parsed)) return [];
@@ -194,7 +179,7 @@ function parseCandidates(raw) {
 // spec :360-455). Slice A adds that export to memory.js in parallel; if it isn't
 // available yet, fall back to upsertExtractedFact (one row per candidate, no
 // embedding-based dedup). Returns a normalized summary either way.
-async function persistCandidates(userId, candidates, conversationId, anthropicKey) {
+async function persistCandidates(userId, candidates, conversationId) {
   let saveMemoryCandidates = null;
   try {
     const mod = await import('./memory.js');
@@ -209,7 +194,7 @@ async function persistCandidates(userId, candidates, conversationId, anthropicKe
     const pool = getPool();
     // LLM adapter for contradiction classification inside saveMemoryCandidates
     // (spec :457-468). Same Anthropic surface used above.
-    const llm = (system, user) => anthropicComplete(system, user, anthropicKey);
+    const llm = (system, user) => completeText({ system, user, maxTokens: 16 });
     const res = await saveMemoryCandidates(pool, userId, candidates, llm);
     return {
       path: 'saveMemoryCandidates',
@@ -241,31 +226,6 @@ async function persistCandidates(userId, candidates, conversationId, anthropicKe
   return { path: 'upsertExtractedFact(fallback)', persisted, keys };
 }
 
-// Minimal Anthropic text completion used as the contradiction-classifier LLM
-// adapter for saveMemoryCandidates. Returns the model's text (or '' on shape
-// surprises); callers tolerate empty (classifier defaults to 'unrelated').
-async function anthropicComplete(system, user, anthropicKey) {
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': anthropicKey,
-      'anthropic-version': '2023-06-01',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5',
-      max_tokens: 16,
-      system,
-      messages: [{ role: 'user', content: user }],
-    }),
-  });
-  if (!r.ok) {
-    const body = await r.text();
-    throw new Error(`Anthropic ${r.status}: ${body.slice(0, 200)}`);
-  }
-  const data = await r.json();
-  return data?.content?.[0]?.text || '';
-}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -279,9 +239,8 @@ export default async function handler(req, res) {
   if (!conversationId) return res.status(400).json({ error: 'conversationId required' });
 
   const elevenKey = process.env.ELEVENLABS_API_KEY;
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
   if (!elevenKey)    return res.status(500).json({ error: 'ELEVENLABS_API_KEY not set' });
-  if (!anthropicKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set' });
+  if (!hasTextLlm()) return res.status(500).json({ error: 'No LLM key: set GEMINI_API_KEY (free) or ANTHROPIC_API_KEY' });
 
   try {
     // ElevenLabs sometimes needs a beat to finalize the transcript.
@@ -300,12 +259,12 @@ export default async function handler(req, res) {
       return res.status(425).json({ ok: false, extracted: 0, reason: 'empty transcript' });
     }
 
-    const candidates = await extractCandidates(transcript, conversationId, anthropicKey);
+    const candidates = await extractCandidates(transcript, conversationId);
     if (candidates.length === 0) {
       return res.status(200).json({ ok: true, extracted: 0, reason: 'no durable facts' });
     }
 
-    const result = await persistCandidates(userId, candidates, conversationId, anthropicKey);
+    const result = await persistCandidates(userId, candidates, conversationId);
 
     return res.status(200).json({
       ok: true,
