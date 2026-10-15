@@ -4,7 +4,7 @@ import { CapacitorConfig } from '@capacitor/cli';
  * ThinkinBuddy (Mark) — Capacitor Android wrapper
  *
  * STRATEGY: thin-shell / remote-URL mode.
- * The app loads https://thinkinbuddy.vercel.app inside a native WebView.
+ * The app loads https://thinkbuddy-sandy.vercel.app inside a native WebView.
  * No assets are bundled locally. This means:
  *   - Zero change to the Vercel web deploy
  *   - APK auto-gets every web update without a Play Store re-release
@@ -22,7 +22,7 @@ const config: CapacitorConfig = {
 
   // Remote-URL shell — loads live Vercel site
   server: {
-    url: 'https://thinkinbuddy.vercel.app',
+    url: 'https://thinkbuddy-sandy.vercel.app',
     cleartext: false,   // HTTPS only — never allow HTTP
     androidScheme: 'https',
   },
@@ -35,7 +35,7 @@ const config: CapacitorConfig = {
   android: {
     // Gradle build flavor — release or debug
     buildOptions: {
-      releaseType: 'APK',   // APK for sideload / direct install; change to 'AAB' for Play Store
+      releaseType: 'AAB',   // Play Store needs AAB; use 'APK' for sideload
     },
   },
 

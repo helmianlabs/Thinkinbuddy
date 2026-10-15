@@ -17,7 +17,7 @@
 // relay decides who sent a message from the ROLE, not from the payload.
 
 const RELAY_URL =
-  process.env.HELMION_RELAY_URL || 'https://thinkinbuddy.vercel.app/api/relay-http';
+  process.env.HELMION_RELAY_URL || 'https://thinkbuddy-sandy.vercel.app/api/relay-http';
 
 // The channel name travels in URLs that get read aloud, pasted into chats and
 // shown on screens. It was Troy's first name; it is now a word that identifies
