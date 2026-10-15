@@ -1,6 +1,15 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDuckDuckGoHtml, hasTextLlm, geminiKey, anthropicKey } from '../lib/llm.js';
+import {
+  parseDuckDuckGoHtml,
+  hasTextLlm,
+  geminiKey,
+  anthropicKey,
+  preferredBrain,
+  preferredModel,
+  keyForProvider,
+  DEFAULT_MODELS,
+} from '../lib/llm.js';
 
 describe('parseDuckDuckGoHtml', () => {
   it('extracts title url snippet from sample markup', () => {
@@ -27,15 +36,46 @@ describe('parseDuckDuckGoHtml', () => {
 });
 
 describe('hasTextLlm', () => {
-  it('false with empty env', () => {
-    assert.equal(hasTextLlm({}), false);
+  it('false with empty env and no req', () => {
+    assert.equal(hasTextLlm(null, {}), false);
   });
-  it('true with GEMINI_API_KEY', () => {
-    assert.equal(hasTextLlm({ GEMINI_API_KEY: 'x' }), true);
+  it('true with GEMINI_API_KEY in env', () => {
+    assert.equal(hasTextLlm(null, { GEMINI_API_KEY: 'x' }), true);
     assert.equal(geminiKey({ GEMINI_API_KEY: ' abc ' }), 'abc');
   });
-  it('true with ANTHROPIC_API_KEY', () => {
-    assert.equal(hasTextLlm({ ANTHROPIC_API_KEY: 'y' }), true);
+  it('true with ANTHROPIC_API_KEY in env', () => {
+    assert.equal(hasTextLlm(null, { ANTHROPIC_API_KEY: 'y' }), true);
     assert.equal(anthropicKey({ ANTHROPIC_API_KEY: 'y' }), 'y');
+  });
+  it('true with user OpenAI header even if env empty', () => {
+    const req = { headers: { 'x-user-key-openai': 'sk-test' } };
+    assert.equal(hasTextLlm(req, {}), true);
+  });
+});
+
+describe('preferredBrain / model / keyForProvider', () => {
+  it('defaults to gemini', () => {
+    assert.equal(preferredBrain({ headers: {} }), 'gemini');
+  });
+  it('reads X-User-Brain and aliases', () => {
+    assert.equal(preferredBrain({ headers: { 'x-user-brain': 'openai' } }), 'openai');
+    assert.equal(preferredBrain({ headers: { 'x-user-brain': 'grok' } }), 'xai');
+    assert.equal(preferredBrain({ headers: { 'x-user-brain': 'claude' } }), 'anthropic');
+  });
+  it('model header overrides default', () => {
+    assert.equal(preferredModel({ headers: {} }, 'gemini'), DEFAULT_MODELS.gemini);
+    assert.equal(preferredModel({ headers: { 'x-user-model': 'gpt-4.1' } }, 'openai'), 'gpt-4.1');
+  });
+  it('user key beats env for openai', () => {
+    const prev = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = 'sk-env';
+    try {
+      const r = keyForProvider({ headers: { 'x-user-key-openai': 'sk-user' } }, 'openai');
+      assert.equal(r.key, 'sk-user');
+      assert.equal(r.source, 'user');
+    } finally {
+      if (prev === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = prev;
+    }
   });
 });

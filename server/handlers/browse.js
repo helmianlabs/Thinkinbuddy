@@ -86,7 +86,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ result: UNSAFE_SITE_MSG });
     }
 
-    if (!hasTextLlm()) {
+    if (!hasTextLlm(req)) {
       return res.status(200).json({ result: text.slice(0, 500) });
     }
 
@@ -94,6 +94,7 @@ export default async function handler(req, res) {
     let result;
     try {
       result = await completeText({
+        req,
         maxTokens: 300,
         system: 'Summarize this webpage content in 3-5 conversational sentences as if you just read it. Focus on what the site is about, what it offers, and your honest impression. No bullet points — this will be read aloud.',
         user: `URL: ${target.toString()}

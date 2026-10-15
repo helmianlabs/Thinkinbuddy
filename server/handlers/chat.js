@@ -60,7 +60,7 @@ export default async function handler(req, res) {
     return res.status(413).json({ error: `conversation too large (max ${MAX_TOTAL_CHARS} characters)` });
   }
 
-  if (!hasTextLlm()) return res.status(500).json({ reply: 'No LLM key: set GEMINI_API_KEY (free) or ANTHROPIC_API_KEY.' });
+  if (!hasTextLlm(req)) return res.status(500).json({ reply: 'No LLM key. Use Free Gemini, or add a key under Settings → Your AI.' });
 
   // Kid-safe gate: moderate the latest user message BEFORE calling Claude.
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
@@ -86,6 +86,7 @@ export default async function handler(req, res) {
 
   try {
     const reply = (await completeText({
+      req,
       maxTokens: 400,
       system: systemPrompt,
       user: messages.map((m) => {

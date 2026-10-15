@@ -52,8 +52,8 @@ export default async function handler(req, res) {
     return res.status(200).json({ result: UNSAFE_QUERY_MSG });
   }
 
-  if (!hasTextLlm()) {
-    return res.status(500).json({ error: 'No LLM key: set GEMINI_API_KEY (free AI Studio) or ANTHROPIC_API_KEY' });
+  if (!hasTextLlm(req)) {
+    return res.status(500).json({ error: 'No LLM key. Use Free Gemini on the server, or add a key under Settings → Your AI.' });
   }
 
   try {
@@ -69,6 +69,7 @@ export default async function handler(req, res) {
       ? hits.map((h, i) => `${i + 1}. ${h.title}\n${h.url}\n${h.snippet}`).join('\n\n')
       : '(no web hits — answer from general knowledge if safe, else say you could not find a kid-appropriate answer)';
     const result = await completeText({
+      req,
       maxTokens: 512,
       system: 'You are a research assistant for a kids and family app (ages 11+). Treat every search as safe-search ON: never surface, link, describe, or summarize adult, sexual, violent, self-harm, or other content inappropriate for children. If the only relevant results are unsafe, say you could not find a kid-appropriate answer instead. Return a concise, conversational summary of the most relevant and current information. 2-4 sentences max. No bullet points — this will be read aloud.',
       user: `Search query: ${query}\n\nWeb results:\n${digest}`,
