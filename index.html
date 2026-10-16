@@ -880,8 +880,12 @@
       // {{user_id}} so in-call saves post to THIS user's prefix instead of
       // /api/memory's now-removed 'troy' default. Until that schema edit ships,
       // in-call save_memory calls will 400 (safe failure) rather than leak.
-      if (currentUser?.userId) {
-        cfg.dynamicVariables = { ...(cfg.dynamicVariables || {}), user_id: currentUser.userId };
+      // Agent tools declare {{user_id}}; ElevenLabs closes the call (1008
+      // "Missing required dynamic variables") if it is absent, so always send one.
+      {
+        let uid = currentUser?.userId || localStorage.getItem('thinkinbuddy_user_id');
+        if (!uid) { uid = 'guest-' + crypto.randomUUID(); localStorage.setItem('thinkinbuddy_user_id', uid); }
+        cfg.dynamicVariables = { ...(cfg.dynamicVariables || {}), user_id: uid };
         console.log('[MEM-HB] set dynamicVariables.user_id for in-call tools');
       }
 
