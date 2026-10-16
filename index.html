@@ -1409,10 +1409,16 @@
       return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
     }
 
+    const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const bgAudio = {
       el: null, url: null, wakeLock: null, active: false, lastError: null,
 
       async start() {
+        // iOS WebKit: starting another <audio> while the ElevenLabs widget holds
+        // the mic switches the audio session and silently stops mic capture
+        // (Mark greets, then hears nothing). Skip the keepalive on iOS.
+        if (IS_IOS) { this.note('skipped on iOS (keeps mic alive)'); console.log('[BG-AUDIO] skipped on iOS'); return; }
         if (this.active) return;
         if (!bgAudioPrefs().background) { this.note('disabled in settings'); return; }
         try {
@@ -2317,6 +2323,7 @@
       let pocketKeeper = null, pocketWakeLock = null, pocketOn = false;
 
       async function armPocketMode() {
+        if (IS_IOS) { console.log('[POCKET] skipped on iOS (keeps mic alive)'); return; }
         try {
           if (!pocketKeeper) {
             pocketKeeper = new Audio(SILENT_WAV);
