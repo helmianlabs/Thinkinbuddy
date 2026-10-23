@@ -524,6 +524,18 @@
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
     }
+    .gallery-lightbox-cast {
+      position: absolute; top: 18px; right: 66px;
+      background: rgba(0,0,0,0.7);
+      border: 1px solid rgba(0,212,255,0.4);
+      color: #00d4ff;
+      height: 36px; padding: 0 14px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-family: monospace;
+      cursor: pointer;
+      align-items: center; justify-content: center;
+    }
   </style>
 </head>
 <body>
@@ -556,6 +568,7 @@
   <!-- Media output area — images and videos appear here -->
   <div id="mediaArea" style="display:none; z-index:2; max-width:340px; width:90%; margin-top:20px; position:relative;">
     <button id="mediaCloseBtn" type="button" aria-label="Dismiss media" style="position:absolute; top:-10px; right:-10px; width:32px; height:32px; border-radius:50%; border:1px solid rgba(0,212,255,0.5); background:rgba(0,0,0,0.85); color:#00d4ff; font-size:1rem; font-family:monospace; cursor:pointer; z-index:3; display:flex; align-items:center; justify-content:center; padding:0;">✕</button>
+    <button id="mediaCastBtn" type="button" aria-label="Watch on TV" style="display:none; position:absolute; top:16px; right:72px; height:44px; padding:0 14px; border-radius:999px; border:1px solid rgba(0,212,255,0.6); background:rgba(0,0,0,0.85); color:#00d4ff; font-size:0.85rem; font-family:monospace; cursor:pointer; z-index:51; align-items:center; justify-content:center;">📺 TV</button>
     <img id="mediaImg" src="" alt="" style="width:100%; border-radius:12px; border:1px solid rgba(0,212,255,0.3); display:none;" />
     <video id="mediaVideo" playsinline controls autoplay muted loop style="width:100%; border-radius:12px; border:1px solid rgba(0,212,255,0.3); display:none;"></video>
     <div id="mediaCaption" style="color:#6b7280; font-size:0.7rem; text-align:center; margin-top:8px; font-family:monospace;"></div>
@@ -601,6 +614,7 @@
   <!-- ─── Lightbox ─────────────────────────────────────────────────── -->
   <div class="gallery-lightbox hidden" id="galleryLightbox">
     <button class="gallery-lightbox-close" id="galleryLightboxClose">✕</button>
+    <button class="gallery-lightbox-cast" id="galleryLightboxCast" type="button" aria-label="Watch on TV" style="display:none;">📺 TV</button>
     <img id="galleryLightboxImg" src="" alt="" style="display:none;" />
     <video id="galleryLightboxVideo" playsinline controls style="display:none;"></video>
     <div class="gallery-lightbox-caption" id="galleryLightboxCaption"></div>
@@ -2115,18 +2129,135 @@
     // video share #mediaArea — showing one hides the other so the orb area
     // doesn't get crowded.
     let lastMediaCheck = 0;
+
+    // ─── Fullscreen + cast helpers for the media overlays ──────────
+    // The live overlays are fixed inset-0 elements; on top of that we
+    // ask for the real Fullscreen API so a phone drops its browser
+    // chrome too. Everything here is feature-detected and try/caught:
+    // a fullscreen refusal or a missing cast API must never break
+    // media display.
+    function enterOverlayFullscreen(el) {
+      try {
+        if (!el || typeof document === 'undefined') return;
+        if (document.fullscreenElement) return;
+        const req = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (typeof req !== 'function') return;
+        const p = req.call(el);
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch {}
+    }
+
+    function exitOverlayFullscreen() {
+      try {
+        if (typeof document === 'undefined') return;
+        if (document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+          const p = document.exitFullscreen();
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        }
+      } catch {}
+    }
+
+    // Cast route chooser — order matters: the native Remote Playback
+    // API (Chrome/Android) first, then Safari's AirPlay picker, then
+    // the share-this-public-URL fallback ("Watch on TV"). Generated
+    // media live at permanent public Blob URLs, so the fallback hands
+    // the TV a link it can open directly. Returns null when there is
+    // nothing to offer (no media URL) — the signal to not render a
+    // cast button at all.
+    function pickCastRoute(videoEl, url) {
+      if (videoEl && videoEl.remote) return 'remote';
+      if (videoEl && typeof videoEl.webkitShowPlaybackTargetPicker === 'function') return 'airplay';
+      if (url) return 'share';
+      return null;
+    }
+
+    // "Watch on TV" fallback: hand the media's public URL to the
+    // system share sheet, or copy it for pasting into the TV's
+    // browser. Returns which path was taken ('share-sheet' /
+    // 'copied' / null).
+    function shareMediaToTv(url, labelEl) {
+      if (!url) return null;
+      try {
+        if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+          const p = navigator.share({ title: 'ThinkinBuddy media', url });
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+          return 'share-sheet';
+        }
+      } catch {}
+      try {
+        if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          const p = navigator.clipboard.writeText(url);
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+          if (labelEl) {
+            const old = labelEl.textContent;
+            labelEl.textContent = 'Link copied — open it on your TV';
+            setTimeout(() => { labelEl.textContent = old; }, 2500);
+          }
+          return 'copied';
+        }
+      } catch {}
+      return null;
+    }
+
+    function castButtonClick(videoEl, url, labelEl) {
+      const route = pickCastRoute(videoEl, url);
+      if (!route) return null;
+      try {
+        if (route === 'remote') {
+          const p = videoEl.remote.prompt();
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        } else if (route === 'airplay') {
+          videoEl.webkitShowPlaybackTargetPicker();
+        } else {
+          return shareMediaToTv(url, labelEl) || route;
+        }
+      } catch {}
+      return route;
+    }
+
+    // Show/hide + wire a cast/TV button for the media identified by
+    // `url`. `videoEl` is the <video> that would cast (null for still
+    // images — they can only take the share route). With the Remote
+    // Playback route we also register watchAvailability interest, the
+    // documented pre-step before prompt(). No route → button hidden.
+    function wireMediaCastButton(btn, videoEl, url) {
+      if (!btn) return null;
+      const route = pickCastRoute(videoEl, url);
+      if (!route) { btn.style.display = 'none'; btn.onclick = null; return null; }
+      btn.style.display = 'flex';
+      if (route === 'remote') {
+        try {
+          const r = videoEl.remote;
+          if (r && typeof r.watchAvailability === 'function') {
+            const p = r.watchAvailability(() => {});
+            if (p && typeof p.catch === 'function') p.catch(() => {});
+          }
+        } catch {}
+      }
+      btn.onclick = () => castButtonClick(videoEl, url, btn);
+      return route;
+    }
+    // ─── end media display helpers ───
+
     function showMedia(url, caption) {
       const area = document.getElementById('mediaArea');
       const img = document.getElementById('mediaImg');
       const vid = document.getElementById('mediaVideo');
       const cap = document.getElementById('mediaCaption');
+      const btn = document.getElementById('mediaCloseBtn');
+      const castBtn = document.getElementById('mediaCastBtn');
       if (!area || !img) return;
       if (vid) { try { vid.pause(); } catch {} vid.style.display = 'none'; vid.src = ''; }
       img.src = url;
-      img.style.display = 'block';
-      area.style.display = 'flex';
-      area.style.flexDirection = 'column';
-      area.style.alignItems = 'center';
+      // Full-viewport overlay — the same pattern showVideo uses, so a
+      // live image fills the phone screen instead of sitting in the
+      // small card. Tap the image (or ✕) to close.
+      area.style.cssText = 'display:flex; position:fixed; inset:0; width:100vw; height:100vh; max-width:none; margin:0; padding:0; z-index:50; background:#000; align-items:center; justify-content:center;';
+      img.style.cssText = 'display:block; width:100vw; height:100vh; object-fit:contain; border-radius:0; border:none; background:#000; cursor:pointer;';
+      if (btn) btn.style.cssText = 'position:fixed; top:16px; right:16px; width:44px; height:44px; border-radius:50%; border:1px solid rgba(0,212,255,0.6); background:rgba(0,0,0,0.85); color:#00d4ff; font-size:1.2rem; font-family:monospace; cursor:pointer; z-index:51; display:flex; align-items:center; justify-content:center; padding:0;';
+      img.onclick = () => hideMedia();
+      wireMediaCastButton(castBtn, null, url);
+      enterOverlayFullscreen(area);
       if (cap) cap.textContent = '';
     }
 
@@ -2136,6 +2267,7 @@
       const vid = document.getElementById('mediaVideo');
       const cap = document.getElementById('mediaCaption');
       const btn = document.getElementById('mediaCloseBtn');
+      const castBtn = document.getElementById('mediaCastBtn');
       if (!area || !vid) return;
       if (img) { img.style.display = 'none'; img.src = ''; }
       vid.src = url;
@@ -2144,6 +2276,8 @@
       vid.style.cssText = 'display:block; width:100vw; height:100vh; object-fit:contain; border-radius:0; border:none; background:#000;';
       if (btn) btn.style.cssText = 'position:fixed; top:16px; right:16px; width:44px; height:44px; border-radius:50%; border:1px solid rgba(0,212,255,0.6); background:rgba(0,0,0,0.85); color:#00d4ff; font-size:1.2rem; font-family:monospace; cursor:pointer; z-index:51; display:flex; align-items:center; justify-content:center; padding:0;';
       try { vid.play().catch(() => {}); } catch {}
+      wireMediaCastButton(castBtn, vid, url);
+      enterOverlayFullscreen(area);
       if (cap) cap.textContent = '';
     }
 
@@ -2153,8 +2287,11 @@
       const vid = document.getElementById('mediaVideo');
       const cap = document.getElementById('mediaCaption');
       const btn = document.getElementById('mediaCloseBtn');
+      const castBtn = document.getElementById('mediaCastBtn');
+      exitOverlayFullscreen();
+      if (castBtn) { castBtn.style.display = 'none'; castBtn.onclick = null; }
       if (area) area.style.cssText = 'display:none; z-index:2; max-width:340px; width:90%; margin-top:20px; position:relative;';
-      if (img) { img.style.display = 'none'; img.src = ''; }
+      if (img) { img.style.cssText = 'width:100%; border-radius:12px; border:1px solid rgba(0,212,255,0.3); display:none;'; img.src = ''; img.onclick = null; }
       if (vid) { try { vid.pause(); } catch {} vid.style.cssText = 'width:100%; border-radius:12px; border:1px solid rgba(0,212,255,0.3); display:none;'; vid.src = ''; }
       if (btn) btn.style.cssText = 'position:absolute; top:-10px; right:-10px; width:32px; height:32px; border-radius:50%; border:1px solid rgba(0,212,255,0.5); background:rgba(0,0,0,0.85); color:#00d4ff; font-size:1rem; font-family:monospace; cursor:pointer; z-index:3; display:flex; align-items:center; justify-content:center; padding:0;';
       if (cap) cap.textContent = '';
@@ -2518,6 +2655,7 @@
     const galleryLbVideo     = document.getElementById('galleryLightboxVideo');
     const galleryLbCaption   = document.getElementById('galleryLightboxCaption');
     const galleryLbCloseEl   = document.getElementById('galleryLightboxClose');
+    const galleryLbCastEl    = document.getElementById('galleryLightboxCast');
 
     let gallerySearchTimer = null;
 
@@ -2649,6 +2787,17 @@
 
       galleryLbCaption.textContent = item.caption || '';
       galleryLightboxEl.classList.remove('hidden');
+
+      // Cast / "Watch on TV" for the lightbox media (helpers live in
+      // the main script block; typeof-guarded like showMedia above).
+      // Videos get the full remote → AirPlay → share chooser; still
+      // images only ever take the share route. No route, no button.
+      if (typeof wireMediaCastButton === 'function') {
+        wireMediaCastButton(galleryLbCastEl, item.type === 'video' ? galleryLbVideo : null, item.blobUrl || '');
+      } else if (galleryLbCastEl) {
+        galleryLbCastEl.style.display = 'none';
+      }
+      if (typeof enterOverlayFullscreen === 'function') enterOverlayFullscreen(galleryLightboxEl);
     }
 
     function closeLightbox() {
@@ -2656,6 +2805,8 @@
       try { galleryLbVideo.pause(); } catch {}
       galleryLbVideo.src = '';
       galleryLbImg.src   = '';
+      if (galleryLbCastEl) { galleryLbCastEl.style.display = 'none'; galleryLbCastEl.onclick = null; }
+      if (typeof exitOverlayFullscreen === 'function') exitOverlayFullscreen();
     }
 
     galleryLbCloseEl.addEventListener('click', closeLightbox);
