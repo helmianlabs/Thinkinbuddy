@@ -45,6 +45,16 @@ export const config = {
   api: { bodyParser: { sizeLimit: '25mb' } },
 };
 
+// Platform note (verified live 2026-10-23): in this Vite-framework
+// build, Vercel emits THIS catch-all's route as a one-segment pattern —
+// /api/<name> reaches this router, but /api/<name>/<more> dies at the
+// platform with a plain-text NOT_FOUND before any function runs. The
+// multi-segment store routes therefore ALSO exist as thin physical
+// files (api/auth/login.js, api/profile/pin.js, api/relay/pair/*.js,
+// ...) that re-export the owning handler; handlers sub-route by URL
+// suffix, so both entry points behave identically. test/routing.test.mjs
+// pins every one of those paths. Function budget: Hobby allows 12 —
+// this router + conversation-webhook + 9 shims = 11.
 const routes = {
   'actionable': () => import('../server/handlers/actionable.js'),
   'actionable-auth': () => import('../server/handlers/actionable-auth.js'),
@@ -75,6 +85,10 @@ const routes = {
   'prime-agent': () => import('../server/handlers/prime-agent.js'),
   'profile': () => import('../server/handlers/profile.js'),
   'recall-memory': () => import('../server/handlers/recall-memory.js'),
+  // The pairing handler's canonical URL space is /api/relay/* (that's
+  // what public/connect.js and the desktop spoke call); 'relay-pair'
+  // below is only this file's historical name for the same handler.
+  'relay': () => import('../server/handlers/relay-pair.js'),
   'relay-http': () => import('../server/handlers/relay-http.js'),
   'relay-pair': () => import('../server/handlers/relay-pair.js'),
   'relay-proxy': () => import('../server/handlers/relay-proxy.js'),
