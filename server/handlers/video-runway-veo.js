@@ -30,7 +30,10 @@ const POLL_TIMEOUT_MS = 270000; // 4.5 min — leaves headroom under our 300s ma
 
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
 
-export const maxDuration = 300;
+// Declared in the standard config shape. NOTE: through the single
+// api/[...path].js router this export is informational only — the
+// effective value lives in the router's ROUTE_FUNCTION_CONFIG map.
+export const config = { maxDuration: 300 };
 
 export default async function handler(req, res) {
   // Shared-secret gate. Called server-to-server by the ElevenLabs agent
@@ -179,7 +182,7 @@ export default async function handler(req, res) {
       console.error('[video] sidecar write failed (non-fatal):', err?.message || err);
     }
     // Persist to Neon memory so this video is recallable by semantic search.
-    saveMediaMemory({ userId, type: 'video', blobUrl: blob.url, prompt, createdAt: ts }).catch(
+    saveMediaMemory({ userId, type: 'video', blobUrl: blob.url, prompt, createdAt: ts, tenantId: resolvedTenant.tenantId }).catch(
       (e) => console.error('[video] saveMediaMemory failed (non-fatal):', e?.message || e)
     );
 
