@@ -1,16 +1,27 @@
-// api/latest-video.js — returns the most recently generated video for a user,
-// AND finalizes any pending Sora jobs (kick-and-poll architecture).
+// api/latest-video.js — returns the most recently generated video for a user.
 //
-// Why finalize here: video generation takes minutes; a single serverless
-// function can't wait that long (plan timeout → 504). So /api/video-sora just
-// STARTS the job and drops a `pending-<jobId>.json` marker. This endpoint —
-// polled by the widget every 3s — checks each pending job's status with
-// OpenAI, downloads the MP4 to Blob when complete, clears the marker, then
-// returns the newest finished video. Each call is short (status check + at
-// most one download), so it always fits inside the function timeout.
+// Videos are written to Vercel Blob by the generation handlers as
+// thinkinbuddy/videos/<userId>/<ts>.mp4 (+ an optional <ts>.meta.json
+// sidecar carrying the prompt). This endpoint serves the newest .mp4
+// whose timestamp is newer than the caller's `since`.
+//
+// PROVIDERS (final sweep): this endpoint used to ALSO finalize pending
+// Sora jobs (kick-and-poll): /api/video-sora started a job and dropped a
+// `pending-<jobId>.json` marker here, and each poll asked OpenAI's
+// Videos API for the result. That API was retired on 2026-09-24, the
+// video-sora route is deleted, and the finalizer went with it — nothing
+// here calls a retired API. The surviving video providers (Runway, Veo,
+// HeyGen) finish through their own handlers. Any ancient pending-*.json
+// markers left in Blob are simply ignored.
+//
+// TENANT SCOPING (audit §2 gap 12 — final sweep): COMPAT mode (no
+// SESSION_SECRET) is unchanged — userId query parameter, 'anonymous'
+// default. ENFORCED mode requires a valid tenant session (401 without
+// one) and the Blob prefix is the SESSION tenant's id, never a
+// caller-supplied value.
 
-import { list, put, del } from '@vercel/blob';
-import { saveMediaMemory } from '../../lib/mediaMemory.js';
+import { list } from '@vercel/blob';
+import { resolveScopedRequestIdentity } from '../../lib/tenant.js';
 
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
 
@@ -19,107 +30,22 @@ function timestampFromKey(pathname) {
   return m ? Number(m[1]) : 0;
 }
 
-// Finalize pending Sora jobs: for each pending-*.json marker, ask OpenAI if the
-// job is done; if so download the MP4 to Blob (as <ts>.mp4 + <ts>.meta.json)
-// and delete the marker. Failed/expired jobs just get their marker deleted.
-async function finalizePending(blobs, token, apiKey) {
-  if (!apiKey) return; // no key → can't finalize; nothing to do
-  const markers = (blobs || []).filter((b) => /\/pending-[^/]+\.json$/.test(b.pathname));
-  for (const marker of markers) {
-    let meta;
-    try {
-      const r = await fetch(marker.url);
-      if (!r.ok) continue;
-      meta = await r.json();
-    } catch {
-      continue;
-    }
-    const jobId = meta?.jobId;
-    if (!jobId) {
-      await del(marker.url, { token }).catch(() => {});
-      continue;
-    }
-    // Stale marker safety valve: drop anything older than 30 min.
-    if (meta.createdAt && Date.now() - meta.createdAt > 30 * 60 * 1000) {
-      await del(marker.url, { token }).catch(() => {});
-      continue;
-    }
-    let status;
-    try {
-      const poll = await fetch(`https://api.openai.com/v1/videos/${jobId}`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      if (!poll.ok) continue;
-      const job = await poll.json();
-      status = job?.status;
-    } catch {
-      continue;
-    }
-    if (status === 'failed') {
-      await del(marker.url, { token }).catch(() => {});
-      continue;
-    }
-    if (status !== 'completed') {
-      continue; // still queued/in_progress — leave the marker, try next poll
-    }
-    // Completed → download MP4 + write final blobs, then clear the marker.
-    try {
-      const contentRes = await fetch(`https://api.openai.com/v1/videos/${jobId}/content`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      if (!contentRes.ok) continue;
-      const buf = Buffer.from(await contentRes.arrayBuffer());
-      const ts = Date.now();
-      const userId = meta.userId || 'anonymous';
-      const finalBlob = await put(`${blobPrefix(userId)}${ts}.mp4`, buf, {
-        access: 'public',
-        contentType: 'video/mp4',
-        addRandomSuffix: false,
-        token,
-      });
-      await put(
-        `${blobPrefix(userId)}${ts}.meta.json`,
-        JSON.stringify({ prompt: meta.prompt || '', provider: meta.provider || 'sora' }),
-        { access: 'public', contentType: 'application/json', addRandomSuffix: false, token },
-      );
-      // Persist to Neon memory so this Sora video is recallable by semantic search.
-      // Mirrors the Runway path in api/video.js:146 — without this, kick-and-poll
-      // (Sora) videos finish in Blob but are never saved to memory_items.
-      if (meta.prompt) {
-        saveMediaMemory({ userId, type: 'video', blobUrl: finalBlob.url, prompt: meta.prompt, createdAt: ts }).catch(
-          (e) => console.error('[latest-video] saveMediaMemory failed (non-fatal):', e?.message || e),
-        );
-      }
-      await del(marker.url, { token }).catch(() => {});
-    } catch (err) {
-      console.error('[latest-video] finalize failed for', jobId, err?.message || err);
-    }
-  }
-}
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const userId = req.query?.userId || 'anonymous';
+  const scoped = resolveScopedRequestIdentity(req, res, req.query?.userId);
+  if (!scoped.ok) return; // enforced mode: requireTenant wrote the 401
+  const userId = scoped.userId || 'anonymous';
   const since = Number(req.query?.since || 0);
 
   const token = process.env.BLOB_READ_WRITE_TOKEN;
-  const apiKey = process.env.OPENAI_API_KEY;
   if (!token) return res.status(200).json({ url: null });
 
   try {
-    let { blobs } = await list({ prefix: blobPrefix(userId), limit: 50, token });
-
-    // Finalize any pending Sora jobs first, then re-list so a just-completed
-    // video is visible on this same poll.
-    const hadPending = (blobs || []).some((b) => /\/pending-[^/]+\.json$/.test(b.pathname));
-    if (hadPending) {
-      await finalizePending(blobs, token, apiKey);
-      ({ blobs } = await list({ prefix: blobPrefix(userId), limit: 50, token }));
-    }
-
+    const { blobs } = await list({ prefix: blobPrefix(userId), limit: 50, token });
     if (!blobs?.length) return res.status(200).json({ url: null });
 
     const mp4s = blobs.filter((b) => /\.mp4$/.test(b.pathname));
