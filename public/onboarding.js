@@ -29,6 +29,9 @@
 //                           403 parent_pin_required / invalid_parent_pin
 // POST /api/profile/pin        { pin } -> set/replace the parent PIN
 // POST /api/profile/pin/verify { pin } -> { ok: boolean }
+// POST /api/auth/delete-account { password } -> 200 { deleted: true } |
+//                           401 invalid_credentials (session + current
+//                           password both required; erases the tenant)
 // Every accounts endpoint answers 503 accounts_not_configured in legacy
 // mode. Auth header: Authorization: Bearer <token>.
 //
@@ -478,6 +481,54 @@ function wireAccountPane() {
   document.getElementById('accountLogout')?.addEventListener('click', () => {
     clearSession();
     location.reload();
+  });
+
+  // ─── Delete my account (Apple 5.1.1(v) / Play deletion rule) ──────
+  // Two deliberate speed bumps before the call: the confirm row stays
+  // hidden until "Delete my account" is tapped, and the final button
+  // does nothing until the parent types DELETE *and* enters the
+  // account password (the server checks the password too — this is a
+  // second lock, not the only one). The warning copy in index.html
+  // says plainly that memories are erased AND that deleting does not
+  // cancel a store subscription.
+  const deleteConfirmRow = document.getElementById('accountDeleteConfirm');
+  document.getElementById('accountDeleteOpen')?.addEventListener('click', () => {
+    setLine('accountDeleteLine', '');
+    if (deleteConfirmRow) deleteConfirmRow.style.display = '';
+    document.getElementById('accountDeletePassword')?.focus();
+  });
+  document.getElementById('accountDeleteCancel')?.addEventListener('click', () => {
+    if (deleteConfirmRow) deleteConfirmRow.style.display = 'none';
+    for (const id of ['accountDeletePassword', 'accountDeleteType']) {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    }
+    setLine('accountDeleteLine', '');
+  });
+  document.getElementById('accountDeleteConfirmBtn')?.addEventListener('click', async () => {
+    setLine('accountDeleteLine', '');
+    const typed = document.getElementById('accountDeleteType')?.value.trim() || '';
+    if (typed !== 'DELETE') {
+      setLine('accountDeleteLine', 'Type DELETE (all capitals) to confirm — nothing has been deleted.');
+      return;
+    }
+    const password = document.getElementById('accountDeletePassword')?.value || '';
+    if (!password) {
+      setLine('accountDeleteLine', 'Enter your account password to confirm — nothing has been deleted.');
+      return;
+    }
+    const res = await api('/api/auth/delete-account', { method: 'POST', body: { password } }).catch(() => null);
+    if (res && isAccountsOff(res)) { enterLegacyMode(); return; }
+    if (res && res.status === 200 && res.data?.deleted) {
+      clearSession();
+      location.reload();
+      return;
+    }
+    if (res && res.status === 401) {
+      setLine('accountDeleteLine', "That password didn't match — nothing was deleted.");
+      return;
+    }
+    setLine('accountDeleteLine', 'Could not delete your account — try again. Nothing was deleted.');
   });
 
   // Refresh the pane whenever the parent opens the Account tab.

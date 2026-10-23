@@ -1,0 +1,31 @@
+{
+	"appId": "com.helmianlabs.thinkinbuddy",
+	"appName": "ThinkinBuddy",
+	"server": {
+		"url": "https://thinkbuddy-sandy.vercel.app",
+		"cleartext": false,
+		"androidScheme": "https"
+	},
+	"webDir": "dist",
+	"android": {},
+	"plugins": {
+		"LocalNotifications": {
+			"smallIcon": "ic_stat_icon_config_sample",
+			"iconColor": "#488AFF",
+			"sound": "beep.wav"
+		},
+		"PushNotifications": {
+			"presentationOptions": [
+				"badge",
+				"sound",
+				"alert"
+			]
+		}
+	},
+	"packageClassList": [
+		"CAPCameraPlugin",
+		"LocalNotificationsPlugin",
+		"PushNotificationsPlugin",
+		"PurchasesPlugin"
+	]
+}

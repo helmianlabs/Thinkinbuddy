@@ -4,6 +4,19 @@
 //   POST /api/auth/signup { email, password } -> 201 { token, tenantId }
 //   POST /api/auth/login  { email, password } -> 200 { token, tenantId }
 //                                              | 401 { error: 'invalid_credentials' }
+//   POST /api/auth/delete-account (session token + { password })
+//                                              -> 200 { deleted: true }
+//                                              | 401 { error: 'invalid_credentials' }
+//
+// Account deletion (Apple App Store 5.1.1(v) + Play's account-deletion
+// requirement) is deliberately the hardest route here to fire by
+// accident: it needs BOTH a valid session token AND the account's
+// current password in the body — a borrowed unlocked phone alone is
+// not enough to erase a child's buddy. The wipe itself (every
+// tenant-scoped table, then the tenants row) is lib/accounts.js
+// deleteAccount. Deleting the account does NOT cancel a store
+// subscription — the client says so before it calls this (the stores
+// own the billing relationship).
 //
 // Identity itself lives in lib/accounts.js (scrypt password storage,
 // tenant + empty profile + free entitlement created at signup); this
@@ -21,8 +34,11 @@
 // wrong password both produce the identical 401 body (lib/accounts.js
 // also runs a dummy verify so the TIMING matches).
 
-import { createAccount, authenticate, getAccountsDb } from '../../lib/accounts.js';
-import { signSession, tenantEnforced } from '../../lib/tenant.js';
+import {
+  createAccount, authenticate, findTenantById, verifyPassword,
+  deleteAccount, getAccountsDb,
+} from '../../lib/accounts.js';
+import { signSession, tenantEnforced, requireTenant } from '../../lib/tenant.js';
 
 function routeOf(req) {
   let pathname = '';
@@ -31,6 +47,7 @@ function routeOf(req) {
   } catch {
     pathname = String(req.url || '');
   }
+  if (/\/delete-account\/?$/.test(pathname)) return 'delete-account';
   if (/\/signup\/?$/.test(pathname)) return 'signup';
   if (/\/login\/?$/.test(pathname)) return 'login';
   return null;
@@ -49,6 +66,19 @@ export async function handleAuth(req, res, db) {
 
   const { email, password } = req.body || {};
   try {
+    if (route === 'delete-account') {
+      // Session first (requireTenant sends the 401 itself when the
+      // token is absent/forged), then the current-password check
+      // against the SESSION's tenant — never an id from the body.
+      const tenant = requireTenant(req, res);
+      if (!tenant) return;
+      const row = await findTenantById(db, tenant.tenantId);
+      const ok = Boolean(row && row.password_hash)
+        && verifyPassword(typeof password === 'string' ? password : '', row.password_hash);
+      if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
+      await deleteAccount(db, tenant.tenantId);
+      return res.status(200).json({ deleted: true });
+    }
     if (route === 'signup') {
       let created;
       try {

@@ -12,6 +12,7 @@
     "@capacitor/android": "^6.2.0",
     "@capacitor/camera": "^6.0.2",
     "@capacitor/core": "^6.2.0",
+    "@capacitor/ios": "^6.2.1",
     "@capacitor/local-notifications": "^6.1.0",
     "@capacitor/push-notifications": "^6.0.2",
     "@elevenlabs/client": "^1.7.0",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^6.2.0",
+    "typescript": "^5.9.3",
     "vite": "^5.0.0",
     "vite-plugin-pwa": "^0.19.0"
   }

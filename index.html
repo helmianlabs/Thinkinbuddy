@@ -715,6 +715,25 @@
         <button type="button" class="secondary" id="accountPinSave">Save PIN</button>
         <div class="test-line" id="accountPinLine"></div>
         <button type="button" class="secondary" id="accountLogout">Log out</button>
+        <label>Delete my account</label>
+        <div class="storage-note">
+          Deleting your account permanently erases your profile, your
+          buddy's memories and conversations, saved keys, connected
+          computers, and credit grants. This cannot be undone.
+          Deleting your account does NOT cancel a subscription — cancel
+          it in the App Store, Play Store, or Stripe first, or billing
+          continues.
+        </div>
+        <button type="button" class="secondary" id="accountDeleteOpen">Delete my account</button>
+        <div id="accountDeleteConfirm" style="display:none;">
+          <label for="accountDeletePassword">Your password</label>
+          <input type="password" id="accountDeletePassword" autocomplete="current-password" />
+          <label for="accountDeleteType">Type DELETE to confirm</label>
+          <input type="text" id="accountDeleteType" autocomplete="off" />
+          <button type="button" class="secondary" id="accountDeleteConfirmBtn">Permanently delete my account</button>
+          <button type="button" class="secondary" id="accountDeleteCancel">Keep my account</button>
+        </div>
+        <div class="test-line" id="accountDeleteLine"></div>
       </div>
     </div>
 

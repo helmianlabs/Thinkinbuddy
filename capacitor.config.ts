@@ -17,7 +17,10 @@ import { CapacitorConfig } from '@capacitor/cli';
  *   3. Run: npx cap sync android
  */
 const config: CapacitorConfig = {
-  appId: 'com.thinkinbuddy.app',
+  // appId is the store bundle/package id. PERMANENT once the App Store /
+  // Play app record exists under it — changing it later means a brand
+  // new store listing (bite 6, docs/store/STORE_LISTING.md).
+  appId: 'com.helmianlabs.thinkinbuddy',
   appName: 'ThinkinBuddy',
 
   // Remote-URL shell — loads live Vercel site
