@@ -8,8 +8,15 @@
 // Query: ?userId=<id>&since=<ms>   (since is optional; widget passes its last
 //                                   seen timestamp to avoid re-rendering the
 //                                   same image)
+//
+// TENANT SCOPING (audit §2 gap 12 — final sweep): COMPAT mode (no
+// SESSION_SECRET) is unchanged — userId query parameter, 'anonymous'
+// default. ENFORCED mode requires a valid tenant session (401 without
+// one) and the Blob prefix is the SESSION tenant's id, never a
+// caller-supplied value, so one tenant cannot poll another's prefix.
 
 import { list } from '@vercel/blob';
+import { resolveScopedRequestIdentity } from '../../lib/tenant.js';
 
 const blobPrefix = (userId) => `thinkinbuddy/images/${userId}/`;
 
@@ -22,9 +29,12 @@ function timestampFromKey(pathname) {
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const userId = req.query?.userId || 'anonymous';
+  const scoped = resolveScopedRequestIdentity(req, res, req.query?.userId);
+  if (!scoped.ok) return; // enforced mode: requireTenant wrote the 401
+  const userId = scoped.userId || 'anonymous';
   const since = Number(req.query?.since || 0);
 
   const token = process.env.BLOB_READ_WRITE_TOKEN;
