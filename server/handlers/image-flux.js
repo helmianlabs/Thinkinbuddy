@@ -9,6 +9,8 @@
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../../lib/security.js';
 import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
+import { getKey } from '../../lib/userKeys.js';
+import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 
 // Replicate model slugs for the three FLUX tiers.
 // Mark's voice spec 2026-06-02: pro = flux-2-pro (latest). Keeping schnell/dev
@@ -49,7 +51,8 @@ export default async function handler(req, res) {
   if (!blobToken) return res.status(500).json({ result: 'BLOB_READ_WRITE_TOKEN not configured' });
 
   // Kid-safe gate: moderate the prompt via OpenAI BEFORE calling Replicate/FLUX.
-  const mod = await isAllowed(prompt, process.env.OPENAI_API_KEY);
+  const { failClosed } = safetyDecision(safetyInputsFromRequest(req));
+  const mod = await isAllowed(prompt, getKey(req, 'OPENAI_API_KEY'), { failClosed });
   if (!mod.allowed) {
     console.warn('[image-flux] prompt blocked by moderation:', mod.reason);
     return res.status(200).json({ result: SAFE_REFUSAL });

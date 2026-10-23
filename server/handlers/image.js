@@ -9,6 +9,8 @@
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../../lib/security.js';
 import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
+import { getKey } from '../../lib/userKeys.js';
+import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 import { saveMediaMemory } from '../../lib/mediaMemory.js';
 
 const MODEL = 'gpt-image-2';
@@ -44,13 +46,14 @@ export default async function handler(req, res) {
   if (rawSize && VALID_SIZES.has(rawSize)) size = rawSize;
   else if (ASPECT_TO_SIZE[rawAspect]) size = ASPECT_TO_SIZE[rawAspect];
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = getKey(req, 'OPENAI_API_KEY');
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey)    return res.status(500).json({ result: 'OPENAI_API_KEY not configured' });
   if (!blobToken) return res.status(500).json({ result: 'BLOB_READ_WRITE_TOKEN not configured' });
 
   // Kid-safe gate: moderate the prompt BEFORE spending a provider call.
-  const mod = await isAllowed(prompt, apiKey);
+  const { failClosed } = safetyDecision(safetyInputsFromRequest(req));
+  const mod = await isAllowed(prompt, apiKey, { failClosed });
   if (!mod.allowed) {
     console.warn('[image] prompt blocked by moderation:', mod.reason);
     return res.status(200).json({ result: SAFE_REFUSAL });

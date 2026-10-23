@@ -11,6 +11,9 @@
 
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../../lib/security.js';
+import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
+import { getKey } from '../../lib/userKeys.js';
+import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 import { saveMediaMemory } from '../../lib/mediaMemory.js';
 
 const RUNWAY_BASE = 'https://api.dev.runwayml.com/v1';
@@ -48,6 +51,16 @@ export default async function handler(req, res) {
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey)    return res.status(500).json({ result: 'RUNWAY_API_KEY not configured' });
   if (!blobToken) return res.status(500).json({ result: 'BLOB_READ_WRITE_TOKEN not configured' });
+
+  // Kid-safe gate: moderate the prompt via OpenAI BEFORE calling Runway
+  // (audit §2 gap 2 — this handler used to send it straight through).
+  // Same pattern and refusal shape as video-runway.js.
+  const { failClosed } = safetyDecision(safetyInputsFromRequest(req));
+  const mod = await isAllowed(prompt, getKey(req, 'OPENAI_API_KEY'), { failClosed });
+  if (!mod.allowed) {
+    console.warn('[video-runway-veo] prompt blocked by moderation:', mod.reason);
+    return res.status(200).json({ result: SAFE_REFUSAL });
+  }
 
   try {
     // 1) Kick off the generation task

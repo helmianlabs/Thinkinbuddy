@@ -11,6 +11,9 @@
 
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../../lib/security.js';
+import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
+import { getKey } from '../../lib/userKeys.js';
+import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
 
@@ -43,6 +46,16 @@ export default async function handler(req, res) {
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey)    return res.status(500).json({ result: 'HEYGEN_API_KEY not configured (get one at https://app.heygen.com/settings/api-key)' });
   if (!blobToken) return res.status(500).json({ result: 'BLOB_READ_WRITE_TOKEN not configured' });
+
+  // Kid-safe gate: moderate the script via OpenAI BEFORE calling HeyGen
+  // (audit §2 gap 1 — this handler used to send it straight through).
+  // Same pattern and refusal shape as video-runway.js.
+  const { failClosed } = safetyDecision(safetyInputsFromRequest(req));
+  const mod = await isAllowed(prompt, getKey(req, 'OPENAI_API_KEY'), { failClosed });
+  if (!mod.allowed) {
+    console.warn('[video-heygen] prompt blocked by moderation:', mod.reason);
+    return res.status(200).json({ result: SAFE_REFUSAL });
+  }
 
   try {
     // Step 1 — kick off generation.

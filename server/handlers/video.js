@@ -16,6 +16,8 @@
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../../lib/security.js';
 import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
+import { getKey } from '../../lib/userKeys.js';
+import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 import { saveMediaMemory } from '../../lib/mediaMemory.js';
 
 export const config = { maxDuration: 300 };
@@ -113,14 +115,15 @@ export default async function handler(req, res) {
     ? parseInt(req.body?.seconds, 10)
     : 10;
 
-  const openaiKey = process.env.OPENAI_API_KEY;
+  const openaiKey = getKey(req, 'OPENAI_API_KEY');
   const runwayKey = process.env.RUNWAY_API_KEY;
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!openaiKey) return res.status(500).json({ result: 'OPENAI_API_KEY not configured' });
   if (!runwayKey) return res.status(500).json({ result: 'RUNWAY_API_KEY not configured' });
   if (!blobToken) return res.status(500).json({ result: 'BLOB_READ_WRITE_TOKEN not configured' });
 
-  const mod = await isAllowed(prompt, openaiKey);
+  const { failClosed } = safetyDecision(safetyInputsFromRequest(req));
+  const mod = await isAllowed(prompt, openaiKey, { failClosed });
   if (!mod.allowed) {
     console.warn('[video] prompt blocked by moderation:', mod.reason);
     return res.status(200).json({ result: SAFE_REFUSAL });

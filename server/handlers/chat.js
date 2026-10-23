@@ -6,7 +6,9 @@
 
 import { buildSystemPrompt } from '../../lib/personality.js';
 import { applyBrowserCors, requireBrowserFetch } from '../../lib/security.js';
-import { isAllowed } from '../../lib/moderation.js';
+import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
+import { getKey } from '../../lib/userKeys.js';
+import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 import { completeText, hasTextLlm } from '../../lib/llm.js';
 
 // Payload ceilings. A single request cannot be made expensive: input tokens are
@@ -69,7 +71,13 @@ export default async function handler(req, res) {
     : Array.isArray(lastUser?.content)
       ? lastUser.content.map((b) => (typeof b === 'string' ? b : b?.text || '')).join(' ')
       : '';
-  const mod = await isAllowed(lastUserText, process.env.OPENAI_API_KEY);
+  // Safety posture for this request (parent safety mode / minor age
+  // band, read from the request's existing plumbing — lib/safety.js).
+  // When it applies, moderation fails CLOSED and the kid safety core
+  // joins the system prompt: unscreened never reaches the LLM.
+  const safetyIn = safetyInputsFromRequest(req);
+  const safety = safetyDecision(safetyIn);
+  const mod = await isAllowed(lastUserText, getKey(req, 'OPENAI_API_KEY'), { failClosed: safety.failClosed });
   if (!mod.allowed) {
     console.warn('[chat] user message blocked by moderation:', mod.reason);
     return res.status(200).json({ reply: "Let's keep it friendly — I'm not going there. What else is on your mind?" });
@@ -82,6 +90,8 @@ export default async function handler(req, res) {
     includeToolsBlock: false,   // no webhook tools on this surface
     includeActionTags: true,    // text path uses ACTION tags as its "tools"
     mode,
+    safetyMode: safetyIn.safetyMode,
+    ageBand: safetyIn.ageBand,
   });
 
   try {
@@ -99,6 +109,16 @@ export default async function handler(req, res) {
         return `${role}: ${c}`;
       }).join('\n\n'),
     })) || 'No response.';
+
+    // Output gate (audit §2 gap 4): screen the buddy's reply BEFORE it
+    // leaves — input-only moderation let anything the model produced
+    // through. A flagged reply is replaced with the standard refusal:
+    // never returned, never scanned for ACTION tags.
+    const outMod = await isAllowed(reply, getKey(req, 'OPENAI_API_KEY'), { failClosed: safety.failClosed });
+    if (!outMod.allowed) {
+      console.warn('[chat] assistant reply blocked by moderation:', outMod.reason);
+      return res.status(200).json({ reply: SAFE_REFUSAL });
+    }
 
     // If the buddy emitted [ACTION:SAVE_TASK:x], persist it silently.
     const taskMatch = reply.match(/\[ACTION:SAVE_TASK:([^\]]+)\]/);
