@@ -24,18 +24,22 @@
 //   source_span INT4RANGE, blob_url TEXT, created_at, updated_at.
 //
 // ─── AUTH ────────────────────────────────────────────────────────────────────
-// TODO(auth): userId is currently taken from the query string and trusted.
-//   The spec (lines 515-516) assumes an auth layer that resolves req.user_id
-//   from the existing voice-agent session/JWT. THIS ENDPOINT DOES NOT VERIFY
-//   THAT THE CALLER OWNS `userId` — any caller can read/edit/delete any user's
-//   memories by passing their id. Before this is exposed beyond a trusted
-//   dashboard, gate it: resolve userId from a verified session/JWT and reject
-//   mismatches (or require a shared admin secret header, like
-//   lib/security.js requireWebhookSecret). CORS via applyBrowserCors only
-//   restricts *browser* origins — it is NOT authentication.
+// Two gates, both applied in the handler below:
+//   1. requireWebhookSecret — the shared operator secret this endpoint
+//      has always required (closed by default when WEBHOOK_SECRET is
+//      unset).
+//   2. Tenant session (ENFORCED mode only — SESSION_SECRET set, the
+//      hosted store build): resolveScopedRequestIdentity requires a
+//      valid session token and replaces the query-string userId with
+//      the session's tenant; every query below then ALSO filters on
+//      tenant_id, so a caller can only ever reach their own tenant's
+//      rows. In compat mode (no SESSION_SECRET — today's live
+//      single-user deployment) behavior is exactly the pre-wiring
+//      behavior: userId from the query string, user_id-only queries.
 
 import { getPool } from './memory.js';
 import { applyBrowserCors, requireWebhookSecret } from '../../lib/security.js';
+import { resolveScopedRequestIdentity } from '../../lib/tenant.js';
 
 // Columns safe to return to the client (everything except the raw embedding,
 // which is large and useless to a human reviewer).
@@ -77,26 +81,18 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Origin not allowed' });
   }
 
-  // ─── AUTH (closes the TODO(auth) hole documented at the top of this file) ──
-  // This endpoint can read, edit and HARD-DELETE any user's memories from a
-  // bare userId in the query string. It had no authentication at all, and an
-  // export button is about to make it discoverable.
-  //
-  // Safe to hard-gate: NOTHING calls this route. Verified by grepping the repo
-  // for "memory-admin" — the only hits are this file's own comments — and
-  // against the live agent's 11 registered tool_ids, which are save_memory,
-  // generate_image, browse_url, search_web, save_task_for_clyde,
-  // generate_video_sora, generate_video_runway, generate_image_imagen,
-  // generate_image_flux, set_alarm and recall_memory. No caller means no
-  // regression, so this one closes by default rather than behind a flag.
-  //
+  // ─── AUTH ─────────────────────────────────────────────────────────────
   // CORS is NOT authentication (see lib/security.js header): a non-browser
-  // client sends no Origin at all and sails past the check above. Proven live
-  // against /api/chat, where `curl -H 'Origin: https://thinkinbuddy.vercel.app'`
-  // turned a 403 into a 400. The secret is the gate; the origin check is not.
+  // client sends no Origin at all and sails past the check above. The
+  // webhook secret is the first gate; in enforced (hosted) mode the
+  // tenant session is the second, and it — not the query string — names
+  // whose memories these are.
   if (!requireWebhookSecret(req, res)) return;
 
-  const userId = req.query?.userId;
+  const scoped = resolveScopedRequestIdentity(req, res, req.query?.userId);
+  if (!scoped.ok) return; // enforced mode: requireTenant wrote the 401
+  const userId = scoped.userId;
+  const tenantId = scoped.tenantId; // null in compat mode -> original queries
   if (!userId) return res.status(400).json({ error: 'userId required' });
 
   const id = req.query?.id;
@@ -107,25 +103,25 @@ export default async function handler(req, res) {
 
     // ─── GET ────────────────────────────────────────────────────────────────
     if (req.method === 'GET') {
-      if (action === 'export') return exportDump(pool, userId, res);
+      if (action === 'export') return exportDump(pool, userId, res, tenantId);
       if (action === 'audit') {
         if (!id) return res.status(400).json({ error: 'id required for audit' });
-        return auditChain(pool, userId, id, res);
+        return auditChain(pool, userId, id, res, tenantId);
       }
-      if (id) return getOne(pool, userId, id, res);
-      return listMemories(pool, userId, req, res);
+      if (id) return getOne(pool, userId, id, res, tenantId);
+      return listMemories(pool, userId, req, res, tenantId);
     }
 
     // ─── PATCH ────────────────────────────────────────────────────────────────
     if (req.method === 'PATCH') {
       if (!id) return res.status(400).json({ error: 'id required' });
-      return patchOne(pool, userId, id, req, res);
+      return patchOne(pool, userId, id, req, res, tenantId);
     }
 
     // ─── DELETE ───────────────────────────────────────────────────────────────
     if (req.method === 'DELETE') {
       if (!id) return res.status(400).json({ error: 'id required' });
-      return deleteOne(pool, userId, id, res);
+      return deleteOne(pool, userId, id, res, tenantId);
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
@@ -136,7 +132,9 @@ export default async function handler(req, res) {
 }
 
 // GET list — filter by scope/kind, paginate. Newest/most-important first.
-async function listMemories(pool, userId, req, res) {
+// tenantId (enforced mode only) adds the tenant_id filter to BOTH the
+// page query and the count query; null (compat) leaves them untouched.
+async function listMemories(pool, userId, req, res, tenantId = null) {
   const { scope, kind } = req.query;
   // Clamp pagination to sane bounds.
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
@@ -145,6 +143,7 @@ async function listMemories(pool, userId, req, res) {
   // Build WHERE dynamically; $1 is always userId.
   const where = ['user_id = $1'];
   const params = [userId];
+  if (tenantId) { params.push(tenantId); where.push(`tenant_id = $${params.length}`); }
   if (scope) { params.push(scope); where.push(`scope = $${params.length}`); }
   if (kind) { params.push(kind); where.push(`kind = $${params.length}`); }
 
@@ -177,24 +176,24 @@ async function listMemories(pool, userId, req, res) {
   });
 }
 
-// GET single row by id (scoped to user).
-async function getOne(pool, userId, id, res) {
+// GET single row by id (scoped to user, and to tenant in enforced mode).
+async function getOne(pool, userId, id, res, tenantId = null) {
   const { rows } = await pool.query(
-    `SELECT ${SELECT_COLS} FROM memory_items WHERE id = $1 AND user_id = $2`,
-    [id, userId]
+    `SELECT ${SELECT_COLS} FROM memory_items WHERE id = $1 AND user_id = $2${tenantId ? ' AND tenant_id = $3' : ''}`,
+    tenantId ? [id, userId, tenantId] : [id, userId]
   );
   if (!rows.length) return res.status(404).json({ error: 'not found' });
   return res.status(200).json({ item: shapeRow(rows[0]) });
 }
 
 // GET export — full JSON dump for the user, with a download header.
-async function exportDump(pool, userId, res) {
+async function exportDump(pool, userId, res, tenantId = null) {
   const { rows } = await pool.query(
     `SELECT ${SELECT_COLS}
        FROM memory_items
-      WHERE user_id = $1
+      WHERE user_id = $1${tenantId ? ' AND tenant_id = $2' : ''}
       ORDER BY created_at`,
-    [userId]
+    tenantId ? [userId, tenantId] : [userId]
   );
   // Sanitize userId for a header-safe filename.
   const safeUser = String(userId).replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -213,7 +212,7 @@ async function exportDump(pool, userId, res) {
 
 // GET audit — walk the supersedes chain backwards from `id`, showing the
 // history of one fact. Guards against cycles with a seen-set and a hard cap.
-async function auditChain(pool, userId, id, res) {
+async function auditChain(pool, userId, id, res, tenantId = null) {
   const chain = [];
   const seen = new Set();
   let cursor = id;
@@ -226,8 +225,8 @@ async function auditChain(pool, userId, id, res) {
               source_session, source_span, supersedes,
               created_at, updated_at, valid_until
          FROM memory_items
-        WHERE id = $1 AND user_id = $2`,
-      [cursor, userId]
+        WHERE id = $1 AND user_id = $2${tenantId ? ' AND tenant_id = $3' : ''}`,
+      tenantId ? [cursor, userId, tenantId] : [cursor, userId]
     );
     if (!rows.length) break;
     chain.push(shapeRow(rows[0]));
@@ -238,7 +237,7 @@ async function auditChain(pool, userId, id, res) {
 }
 
 // PATCH — edit subject/content/importance/valid_until by id.
-async function patchOne(pool, userId, id, req, res) {
+async function patchOne(pool, userId, id, req, res, tenantId = null) {
   const body = req.body || {};
   const sets = [];
   const params = [];
@@ -282,11 +281,16 @@ async function patchOne(pool, userId, id, req, res) {
   params.push(id, userId);
   const idIdx = params.length - 1;
   const userIdx = params.length;
+  let tenantClause = '';
+  if (tenantId) {
+    params.push(tenantId);
+    tenantClause = ` AND tenant_id = $${params.length}`;
+  }
 
   const { rows } = await pool.query(
     `UPDATE memory_items
         SET ${sets.join(', ')}
-      WHERE id = $${idIdx} AND user_id = $${userIdx}
+      WHERE id = $${idIdx} AND user_id = $${userIdx}${tenantClause}
       RETURNING ${SELECT_COLS}`,
     params
   );
@@ -296,10 +300,10 @@ async function patchOne(pool, userId, id, req, res) {
 
 // DELETE — hard delete by id. supersedes FK is ON DELETE SET NULL
 // (scripts/setup-memory-db.mjs:61), so dependents are not cascaded.
-async function deleteOne(pool, userId, id, res) {
+async function deleteOne(pool, userId, id, res, tenantId = null) {
   const { rowCount } = await pool.query(
-    `DELETE FROM memory_items WHERE id = $1 AND user_id = $2`,
-    [id, userId]
+    `DELETE FROM memory_items WHERE id = $1 AND user_id = $2${tenantId ? ' AND tenant_id = $3' : ''}`,
+    tenantId ? [id, userId, tenantId] : [id, userId]
   );
   if (!rowCount) return res.status(404).json({ error: 'not found' });
   return res.status(200).json({ ok: true, deleted: rowCount });
