@@ -26,7 +26,7 @@ export default async function handler(req, res) {
   // additionally fetches an arbitrary attacker-supplied URL from Vercel's
   // network. Had no gate: `POST {}` returned 400 "url required" from anywhere.
   //
-  // NO-OP UNTIL ENFORCE_TOOL_AUTH=1 — see lib/security.js:requireToolAuth.
+  // NO-OP UNTIL ENFORCE_TOOL_AUTH is truthy — see lib/security.js:requireToolAuth.
   if (!requireToolAuth(req, res)) return;
 
   const url = req.body?.url || req.query?.url;
