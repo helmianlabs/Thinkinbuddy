@@ -11,6 +11,7 @@ const routes = {
   'actionable-search': () => import('../server/handlers/actionable-search.js'),
   'ai-test': () => import('../server/handlers/ai-test.js'),
   'alarm': () => import('../server/handlers/alarm.js'),
+  'billing-webhook': () => import('../server/handlers/billing-webhook.js'),
   'browse': () => import('../server/handlers/browse.js'),
   'chat': () => import('../server/handlers/chat.js'),
   'conversation-history': () => import('../server/handlers/conversation-history.js'),

@@ -32,6 +32,7 @@ class FakeDb {
   constructor() {
     this.ledger = [];
     this.entitlements = new Map();
+    this.grants = [];
     this.queryCount = 0;
   }
 
@@ -63,7 +64,19 @@ class FakeDb {
       const row = this.entitlements.get(params[0]) || null;
       return { rows: row ? [row] : [] };
     }
+    if (/FROM tenant_credit_grants/i.test(sql) && /SUM\(credits\)/i.test(sql)) {
+      const [tenantId, nowIso] = params;
+      const now = new Date(nowIso);
+      const credits = this.grants
+        .filter((g) => g.tenant_id === tenantId && (g.expires_at == null || new Date(g.expires_at) > now))
+        .reduce((s, g) => s + Number(g.credits), 0);
+      return { rows: [{ credits }] };
+    }
     throw new Error(`FakeDb: unexpected SQL: ${sql.slice(0, 90)}`);
+  }
+
+  seedGrant({ tenantId, credits, expiresAt = null }) {
+    this.grants.push({ tenant_id: tenantId, credits, expires_at: expiresAt });
   }
 
   seed({ tenantId, micros, at, requestId = null }) {
@@ -235,6 +248,17 @@ describe('checkBucket / PLAN_GRANTS', () => {
     assert.equal((await checkBucket(db, TENANT_A, { plan: 'platinum' })).granted, 0);
     assert.equal((await checkBucket(db, TENANT_A, null)).granted, 0);
     assert.equal(await getEntitlement(db, TENANT_B), null);
+  });
+
+  it('credit-pack grants stack on top of the plan grant; expired grants do not count', async () => {
+    const db = new FakeDb();
+    db.seedGrant({ tenantId: TENANT_A, credits: 5000 });
+    db.seedGrant({ tenantId: TENANT_A, credits: 7000, expiresAt: new Date(Date.now() - 86_400_000) }); // expired yesterday
+    db.seedGrant({ tenantId: TENANT_B, credits: 9000 }); // someone else's
+    const state = await checkBucket(db, TENANT_A, { plan: 'buddy' });
+    assert.equal(state.grants, 5000);
+    assert.equal(state.granted, 10000 + 5000);
+    assert.equal(state.remaining, 15000);
   });
 });
 
