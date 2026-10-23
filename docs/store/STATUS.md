@@ -23,7 +23,16 @@ Last updated: 2026-10-23 (final sweep, bite 8).
 | 5b | Onboarding front end: first-run flow, name + age band + safety/PIN setup | `e6e9250e` | 167/167 (statically verified only — no browser run) |
 | 7 | Helmian Connect relay productization: per-tenant channels, 6-digit pairing (10-min, single-use), device tokens hashed, plan gate incl. lapsed plans | `501d5c64` | 185/185 |
 | 6 | iOS scaffold (Capacitor, appId `com.helmianlabs.thinkinbuddy`, mic usage string), in-app account deletion, store listing + privacy drafts | `42efaf32` | 204/204 |
-| 8 | Final sweep (this page) | final sweep commit (this push) | 224/224 |
+| 8 | Final sweep (this page) | per-file commits `7d5fa35d`…`02b502be` (see push note) | 224/224 |
+
+**Push note (bite 8):** the connector's `push_files` snapshot route
+failed twice with `403 Resource not accessible by integration` on git
+tree creation, so the sweep landed as individual Contents-API commits
+(one per file) plus two `delete_file` commits. Two files could NOT be
+pushed through the connector at all and are listed as leftovers below:
+`index.html` (126 KB — exceeds the connector's argument limit) and
+`.github/workflows/ios.yml` (the GitHub App lacks the Workflows
+permission — see item 11).
 
 ## Bite 8 — final sweep detail
 
@@ -81,12 +90,17 @@ Last updated: 2026-10-23 (final sweep, bite 8).
    see it. Compat mode unchanged.
 8. **Dead providers removed.** `video-sora.js` (OpenAI retired the
    Videos/Sora API 2026-09-24) and `image-imagen.js` (Google shut down
-   Imagen 2026-08-17) are DELETED and unrouted; front-end provider map
-   and stale comments cleaned up. Surviving routes — video: Runway
-   (`video`, `video-runway`), Veo (`video-runway-veo`), HeyGen
-   (`video-heygen`); image: OpenAI gpt-image-2 (`image`), Replicate Flux
-   (`image-flux`). `latest-video`'s Sora finalizer (kick-and-poll
-   against the retired API) was removed with them.
+   Imagen 2026-08-17) are DELETED and unrouted; stale comments cleaned
+   up. Surviving routes — video: Runway (`video`, `video-runway`), Veo
+   (`video-runway-veo`), HeyGen (`video-heygen`); image: OpenAI
+   gpt-image-2 (`image`), Replicate Flux (`image-flux`).
+   `latest-video`'s Sora finalizer (kick-and-poll against the retired
+   API) was removed with them. ONE cosmetic leftover: `index.html`'s
+   front-end `ROUTE_PROVIDERS` map still lists the two dead routes —
+   the edit is made in the working tree but the file (126 KB) exceeds
+   the GitHub connector's argument limit, so it could not be pushed
+   (see the push note). The entries are inert: the router 404s those
+   paths, and the map only forwards BYO keys for routes the UI calls.
 9. **Curricula age-gating — BLOCKED, documented, not invented.** The 8
    subject curricula live ONLY in ElevenLabs' hosted Knowledge Base.
    This repo holds no curriculum list the code can read
@@ -104,11 +118,23 @@ Last updated: 2026-10-23 (final sweep, bite 8).
 10. **.env.example** documents `SESSION_SECRET` and
     `REVENUECAT_WEBHOOK_SECRET` (names + placeholders only), and its
     Sora/Imagen references were corrected.
-11. **iOS CI (`.github/workflows/ios.yml`).** Job 1 builds the iOS app
-    for the simulator on macos-14 (unsigned, $0 — public repo) and
-    uploads the .app. Job 2 (signed archive) is manual-dispatch only
-    and SKIPS CLEANLY when the signing secrets (listed in the file
-    header) are absent. Trigger outcome: `PENDING_WORKFLOW`.
+11. **iOS CI (`.github/workflows/ios.yml`) — WRITTEN, NOT YET ON THE
+    BRANCH.** The workflow is complete and YAML-validated: Job 1 builds
+    the iOS app for the simulator on macos-14 (unsigned, $0 — public
+    repo) and uploads the .app; Job 2 (signed archive) is
+    manual-dispatch only and SKIPS CLEANLY when the signing secrets
+    (listed in the file header) are absent. BUT pushing it failed:
+    `403 Resource not accessible by integration` — the Muse GitHub
+    App does not hold the **Workflows** permission GitHub requires to
+    write files under `.github/workflows/`, and the connector has no
+    Actions dispatch tool either, so no run could be triggered from
+    here. TO LAND IT (Troy, either route): (a) GitHub web UI → repo →
+    Add file → Upload files → upload `.github/workflows/ios.yml`
+    (the file is in the working tree / attached to the sweep report)
+    and commit it to `store/bite1-tenants` — that push itself triggers
+    Job 1; or (b) grant the Muse GitHub App the Workflows permission
+    and ask Muse to re-push it. First run to expect: `ios-simulator-build`
+    on the workflow-file push; the archive job stays dispatch-only.
 12. **This file.**
 
 ## What remains Troy's (ordered)
@@ -116,6 +142,12 @@ Last updated: 2026-10-23 (final sweep, bite 8).
 1. **Vercel Pro upgrade** on team `dairyforge1-6376` (or wait out the
    Hobby 100-deployments/day cap) — the store-test deploy of this
    branch is still blocked by that cap.
+1b. **Land the iOS workflow** (sweep item 11): upload
+   `.github/workflows/ios.yml` via the GitHub web UI (or grant the
+   Muse app the Workflows permission for a re-push). That push is
+   also the first CI trigger. Same sitting can fix the inert
+   `index.html` `ROUTE_PROVIDERS` entries (delete the `image-imagen`
+   and `video-sora` lines) — the connector could not push that file.
 2. **Run the DB migrations** `sql/store/001`–`005` against the real
    Neon database in a sitting together — they have NEVER been executed
    against a live Postgres.
@@ -162,7 +194,9 @@ Last updated: 2026-10-23 (final sweep, bite 8).
   real Postgres; all tenant/billing/relay SQL is test-verified only.
 - **Onboarding front end (5b)** was verified statically, never in a
   browser.
-- **No iOS build had run** before this sweep's workflow; its real
-  result is recorded in item 11 above.
+- **No iOS build has run** — the CI workflow itself could not be
+  pushed (GitHub App lacks the Workflows permission; sweep item 11
+  has the two routes to land it, after which its first run is the
+  proof).
 - **Relay pairing** is coded + unit-tested on the ThinkinBuddy side
   only; no live device pair has happened.
