@@ -619,9 +619,10 @@
     <h2>Settings</h2>
 
     <div class="tabs">
-      <button data-tab="keys"  class="active">Your AI</button>
+      <button data-tab="keys"  class="active">Advanced — your own API keys (optional)</button>
       <button data-tab="voice">Voice</button>
       <button data-tab="audio">Audio</button>
+      <button data-tab="account">Account &amp; Safety</button>
     </div>
 
     <div class="tab-body">
@@ -679,6 +680,41 @@
           </span>
         </label>
         <div class="test-line" id="bgAudioStatus">Status: not started.</div>
+      </div>
+
+      <!-- ── ACCOUNT & SAFETY ─────────────────────────────────────── -->
+      <div class="tab-pane" data-pane="account" id="accountPane">
+        <div class="storage-note">
+          Your ThinkinBuddy account, your plan, and the safety lock for
+          younger users. Wired by /onboarding.js; hides itself when the
+          server runs in legacy single-user mode.
+        </div>
+        <div class="test-line" id="accountPlanLine">Plan: …</div>
+        <label class="toggle-row" for="accountSafetyToggle">
+          <input type="checkbox" id="accountSafetyToggle" />
+          <span class="toggle-text">Safety mode
+            <small>Extra content guardrails for younger users. Turning it off needs the parent PIN when one is set.</small>
+          </span>
+        </label>
+        <div id="accountSafetyPinRow" style="display:none;">
+          <label for="accountSafetyPin">Parent PIN — required to turn safety off</label>
+          <input type="password" id="accountSafetyPin" inputmode="numeric" autocomplete="off" />
+          <button type="button" class="secondary" id="accountSafetyPinConfirm">Turn safety off</button>
+        </div>
+        <div class="test-line" id="accountStatusLine"></div>
+        <label>Parent PIN</label>
+        <div class="test-line" id="accountPinStatus">No parent PIN set.</div>
+        <div id="accountCurrentPinRow" style="display:none;">
+          <label for="accountCurrentPin">Current PIN</label>
+          <input type="password" id="accountCurrentPin" inputmode="numeric" autocomplete="off" />
+        </div>
+        <label for="accountNewPin">New PIN (4–6 digits)</label>
+        <input type="password" id="accountNewPin" inputmode="numeric" autocomplete="off" />
+        <label for="accountNewPinConfirm">New PIN again</label>
+        <input type="password" id="accountNewPinConfirm" inputmode="numeric" autocomplete="off" />
+        <button type="button" class="secondary" id="accountPinSave">Save PIN</button>
+        <div class="test-line" id="accountPinLine"></div>
+        <button type="button" class="secondary" id="accountLogout">Log out</button>
       </div>
     </div>
 
@@ -2599,5 +2635,11 @@
       mo.observe(document.getElementById('mediaArea'), { attributes: true, attributeFilter: ['style'] });
     }
   </script>
+
+  <!-- Account sign-in + onboarding overlay (hosted accounts mode only;
+       populated by /onboarding.js, stays hidden in legacy single-user mode) -->
+  <div class="onboarding hidden" id="accountOverlay"></div>
+
+  <script type="module" src="/onboarding.js"></script>
 </body>
 </html>
