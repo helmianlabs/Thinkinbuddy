@@ -1,6 +1,69 @@
-// Research data logging endpoint
-// Saves anonymized conversation snapshots to Vercel Blob for psychological research analysis
-// Only fires when user has explicitly consented (consentResearch flag in payload)
+// Research data logging endpoint.
+//
+// PRIVACY (audit §2 gap 11 — fixed in the final sweep): the previous
+// version wrote the RAW conversation text into a PUBLIC Vercel Blob.
+// This version never stores message content at all. What is stored is
+// redacted session metadata only — counts, roles, and per-message
+// lengths — which is enough for aggregate research questions (session
+// length, turn balance) and contains nothing a reader could quote,
+// search, or attribute. No message text, no names, no free-form
+// userContext strings are persisted; the participant is represented
+// only by a SHA-256 hash of their id, and the stored object is JSON,
+// not a transcript.
+//
+// Only fires when the user has explicitly consented (consentResearch
+// flag in payload).
+
+import { createHash } from 'node:crypto';
+
+function hashString(str) {
+  return createHash('sha256').update(String(str)).digest('hex');
+}
+
+function normalizeRole(role) {
+  if (role === 'user') return 'user';
+  if (role === 'assistant' || role === 'agent' || role === 'buddy') return 'assistant';
+  return 'other';
+}
+
+function contentLength(content) {
+  if (typeof content === 'string') return content.length;
+  if (Array.isArray(content)) {
+    return content.reduce((n, part) => n + (typeof part === 'string'
+      ? part.length
+      : (typeof part?.text === 'string' ? part.text.length : 0)), 0);
+  }
+  return 0;
+}
+
+/**
+ * Build the ONLY object this endpoint is allowed to persist.
+ * Exported for the redaction test: it must be impossible for any
+ * caller-supplied string (message content, researchTag, ageRange,
+ * names) to appear in the returned object.
+ *
+ * @param {Array<{role?: string, content?: unknown}>} conversation
+ * @param {object} [userContext]
+ * @returns {object} redacted metadata (counts + lengths + hashes only)
+ */
+export function buildResearchLogMetadata(conversation, userContext = {}) {
+  const messages = (Array.isArray(conversation) ? conversation : []).map((msg) => ({
+    role: normalizeRole(msg?.role),
+    content_length: contentLength(msg?.content),
+  }));
+  return {
+    kind: 'thinkinbuddy-research-session-metadata',
+    version: 2,
+    session_date: new Date().toISOString(),
+    consent_recorded: Boolean(userContext?.consentDate),
+    participant_hash: userContext?.userId ? hashString(userContext.userId) : 'anon',
+    message_count: messages.length,
+    user_message_count: messages.filter((m) => m.role === 'user').length,
+    assistant_message_count: messages.filter((m) => m.role === 'assistant').length,
+    total_content_characters: messages.reduce((n, m) => n + m.content_length, 0),
+    messages,
+  };
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -29,58 +92,18 @@ export default async function handler(req, res) {
   try {
     const { put } = await import('@vercel/blob');
 
-    // Anonymize: hash userId, strip any obvious PII patterns from messages
-    const userIdHash = userContext?.userId
-      ? hashString(userContext.userId)
-      : 'anon';
-
     const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const filename = `research/${new Date().toISOString().slice(0, 10)}/${userIdHash}-${sessionId}.md`;
+    const filename = `research/${new Date().toISOString().slice(0, 10)}/${sessionId}.json`;
+    const metadata = buildResearchLogMetadata(conversation, userContext);
 
-    const md = formatAsMarkdown(conversation, userContext);
-
-    await put(filename, md, {
+    await put(filename, JSON.stringify(metadata, null, 2), {
       access: 'public',
-      contentType: 'text/markdown'
+      contentType: 'application/json',
+      token: blobToken,
     });
 
     return res.status(200).json({ logged: true, sessionId });
   } catch (e) {
     return res.status(500).json({ error: 'Failed to log', details: e.message });
   }
-}
-
-// Simple non-cryptographic hash for de-identification
-function hashString(str) {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) {
-    h = ((h << 5) - h) + str.charCodeAt(i);
-    h = h & h;
-  }
-  return Math.abs(h).toString(36);
-}
-
-function formatAsMarkdown(conversation, userContext) {
-  const date = new Date().toISOString();
-  const consentDate = userContext?.consentDate || 'unrecorded';
-  const sessionLength = conversation.length;
-  const namedTag = userContext?.researchTag || 'general';
-
-  let md = `---\n`;
-  md += `session_date: ${date}\n`;
-  md += `consent_date: ${consentDate}\n`;
-  md += `participant_hash: ${hashString(userContext?.userId || 'anon')}\n`;
-  md += `participant_age_range: ${userContext?.ageRange || 'unspecified'}\n`;
-  md += `research_tag: ${namedTag}\n`;
-  md += `message_count: ${sessionLength}\n`;
-  md += `---\n\n`;
-
-  md += `# Session ${date.slice(0, 10)}\n\n`;
-
-  for (const msg of conversation) {
-    const role = msg.role === 'user' ? 'PARTICIPANT' : 'THINKINBUDDY';
-    md += `## ${role}\n${msg.content}\n\n`;
-  }
-
-  return md;
 }
