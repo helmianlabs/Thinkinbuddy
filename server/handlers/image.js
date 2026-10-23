@@ -146,7 +146,7 @@ export default async function handler(req, res) {
         console.error('[image] sidecar write failed (non-fatal):', err?.message || err);
       }
       // Persist to Neon memory so this image is recallable by semantic search.
-      saveMediaMemory({ userId, type: 'image', blobUrl: publicUrl, prompt, createdAt: ts }).catch(
+      saveMediaMemory({ userId, type: 'image', blobUrl: publicUrl, prompt, createdAt: ts, tenantId: resolvedTenant.tenantId }).catch(
         (e) => console.error('[image] saveMediaMemory failed (non-fatal):', e?.message || e)
       );
     } else {
