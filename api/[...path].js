@@ -33,6 +33,7 @@ const routes = {
   'profile': () => import('../server/handlers/profile.js'),
   'recall-memory': () => import('../server/handlers/recall-memory.js'),
   'relay-http': () => import('../server/handlers/relay-http.js'),
+  'relay-pair': () => import('../server/handlers/relay-pair.js'),
   'relay-proxy': () => import('../server/handlers/relay-proxy.js'),
   'research-log': () => import('../server/handlers/research-log.js'),
   'search': () => import('../server/handlers/search.js'),

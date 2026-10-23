@@ -15,6 +15,20 @@
 // The channel and role are fixed here rather than taken from the caller. A
 // browser that could name its own role could claim to be the desktop, and the
 // relay decides who sent a message from the ROLE, not from the payload.
+//
+// HOSTED MODE (store build, relay bite): with SESSION_SECRET set, the
+// channel is no longer the fixed env channel — it is DERIVED from the
+// signed-in tenant (lib/relay.js channelForTenant), the Helmian
+// Connect entitlement gates this door, and the caller's own session
+// token is forwarded to relay-http, which resolves the same tenant
+// from it. The personal secret is not consulted in that mode. Compat
+// mode (no SESSION_SECRET) is the original wiring, unchanged. See
+// docs/store/HELMIAN_CONNECT.md.
+
+import { requireTenant, tenantEnforced } from '../../lib/tenant.js';
+import {
+  channelForTenant, requireConnectEntitlement, getRelayDb,
+} from '../../lib/relay.js';
 
 const RELAY_URL =
   process.env.HELMION_RELAY_URL || 'https://thinkbuddy-sandy.vercel.app/api/relay-http';
@@ -28,15 +42,39 @@ const ROLE = 'phone';
 export default async function handler(req, res) {
   res.setHeader('cache-control', 'no-store');
 
-  const secret = process.env.HELMION_RELAY_SECRET || process.env.MCP_SECRET;
-  if (!secret) {
-    // Says which variable is missing. A 500 with no name is a 20-minute hunt.
-    res.status(503).json({ error: 'HELMION_RELAY_SECRET is not set on the server' });
-    return;
+  // Resolve the channel + the credential forwarded upstream, by mode.
+  // Hosted: the tenant from the session names the channel, and their
+  // own token rides along. Compat: the fixed env channel and the
+  // server-held secret, exactly as before this bite.
+  let channel = CHANNEL;
+  let upstreamAuth;
+  if (tenantEnforced()) {
+    const tenant = requireTenant(req, res);
+    if (!tenant) return; // requireTenant wrote the 401
+    let entitled = false;
+    try {
+      entitled = await requireConnectEntitlement(getRelayDb, tenant.tenantId);
+    } catch {
+      entitled = false; // an unreadable gate is a closed gate
+    }
+    if (!entitled) {
+      res.status(403).json({ error: 'helmian_connect_required' });
+      return;
+    }
+    channel = channelForTenant(tenant.tenantId);
+    upstreamAuth = req.headers.authorization; // the caller's Bearer session token
+  } else {
+    const secret = process.env.HELMION_RELAY_SECRET || process.env.MCP_SECRET;
+    if (!secret) {
+      // Says which variable is missing. A 500 with no name is a 20-minute hunt.
+      res.status(503).json({ error: 'HELMION_RELAY_SECRET is not set on the server' });
+      return;
+    }
+    upstreamAuth = `Bearer ${secret}`;
   }
 
   const url = new URL(RELAY_URL);
-  url.searchParams.set('channel', CHANNEL);
+  url.searchParams.set('channel', channel);
   url.searchParams.set('role', ROLE);
 
   try {
@@ -55,7 +93,7 @@ export default async function handler(req, res) {
         }
         const sent = await fetch(url, {
           method: 'POST',
-          headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' },
+          headers: { authorization: upstreamAuth, 'content-type': 'application/json' },
           body: JSON.stringify({ body: outbound }),
         });
         const sentText = await sent.text();
@@ -66,7 +104,7 @@ export default async function handler(req, res) {
       const since = Number(req.query?.since);
       url.searchParams.set('since', Number.isSafeInteger(since) && since >= 0 ? String(since) : '0');
 
-      const r = await fetch(url, { headers: { authorization: `Bearer ${secret}` } });
+      const r = await fetch(url, { headers: { authorization: upstreamAuth } });
       const text = await r.text();
       res.status(r.status).setHeader('content-type', 'application/json').send(text);
       return;
@@ -87,7 +125,7 @@ export default async function handler(req, res) {
 
       const r = await fetch(url, {
         method: 'POST',
-        headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' },
+        headers: { authorization: upstreamAuth, 'content-type': 'application/json' },
         body: JSON.stringify({ body }),
       });
       const text = await r.text();

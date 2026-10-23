@@ -21,6 +21,11 @@
 
 import crypto from 'node:crypto';
 import { Pool } from 'pg';
+import { tenantEnforced, verifySession } from '../../lib/tenant.js';
+import {
+  channelForTenant, requireConnectEntitlement, authenticateDeviceRecord,
+  recordDeviceSeen, getRelayDb,
+} from '../../lib/relay.js';
 
 export const config = { maxDuration: 15 };
 
@@ -89,6 +94,42 @@ function credentials(req, url) {
   return bearer ? bearer[1].trim() : url.searchParams.get('key');
 }
 
+// HOSTED MODE caller resolution (store build, relay bite). The
+// credential is either a tenant SESSION token (lib/tenant.js — the
+// signed-in web client) or a paired computer's DEVICE token
+// (lib/relay.js — the desktop spoke). Both resolve to the tenant's
+// derived channel; neither ever names a channel itself. Entitlement is
+// resolved here too so the handler refuses non-Connect tenants before
+// any relay row is read or written. Device/entitlement rows live in
+// the STORE database (getRelayDb: DATABASE_URL_MEMORY || DATABASE_URL)
+// — in a hosted deployment that is the same database this file's own
+// pool reaches for the relay tables (sql/relay.sql + sql/store/*.sql
+// are run against one database; see docs/store/HELMIAN_CONNECT.md).
+async function resolveHostedCaller(credential) {
+  if (!credential || typeof credential !== 'string') return null;
+  const session = verifySession(credential, process.env.SESSION_SECRET);
+  if (session) {
+    const entitled = await requireConnectEntitlement(getRelayDb, session.tenantId);
+    return {
+      tenantId: session.tenantId,
+      channel: channelForTenant(session.tenantId),
+      deviceId: null,
+      entitled,
+    };
+  }
+  const device = await authenticateDeviceRecord(getRelayDb, credential);
+  if (device) {
+    const entitled = await requireConnectEntitlement(getRelayDb, device.tenantId);
+    return {
+      tenantId: device.tenantId,
+      channel: channelForTenant(device.tenantId),
+      deviceId: device.deviceId,
+      entitled,
+    };
+  }
+  return null;
+}
+
 export default async function handler(req, res) {
   res.setHeader('cache-control', 'no-store');
 
@@ -103,12 +144,45 @@ export default async function handler(req, res) {
   // AUTH BEFORE ANYTHING IS READ. Not just to refuse the caller — doing the
   // work first and rejecting after would let response timing reveal whether a
   // channel exists.
-  if (!secretMatches(credentials(req, url))) {
+  //
+  // HOSTED MODE (SESSION_SECRET set — lib/tenant.js tenantEnforced):
+  // identity comes from the CALLER, never from shared configuration.
+  // The caller's channel parameter is ignored; the channel is derived
+  // from the resolved tenant, and the tenant must hold the Helmian
+  // Connect entitlement. The personal secret and the 'pilot' channel
+  // authenticate NOTHING in this mode — they are the compat wiring
+  // below, live only on the deployment with no SESSION_SECRET (Troy's
+  // single-user app), which behaves exactly as before this bite.
+  let channel = url.searchParams.get('channel');
+  let tenantId = null; // hosted mode only; stamped on writes (sql/store/005)
+  if (tenantEnforced()) {
+    let caller = null;
+    try {
+      caller = await resolveHostedCaller(credentials(req, url));
+    } catch (err) {
+      res.status(503).json({ error: `relay store unavailable: ${err.message}` });
+      return;
+    }
+    if (!caller) {
+      res.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    if (!caller.entitled) {
+      res.status(403).json({ error: 'helmian_connect_required' });
+      return;
+    }
+    tenantId = caller.tenantId;
+    channel = caller.channel;
+    if (caller.deviceId) {
+      // Presence for the parent's device list. Best-effort: a failed
+      // stamp must never fail the relay call itself.
+      recordDeviceSeen(getRelayDb, caller.deviceId).catch(() => {});
+    }
+  } else if (!secretMatches(credentials(req, url))) {
     res.status(401).json({ error: 'unauthorized' });
     return;
   }
 
-  const channel = url.searchParams.get('channel');
   const role = url.searchParams.get('role');
   if (!CHANNEL_RE.test(String(channel)) || !ROLES.includes(role)) {
     res.status(400).json({ error: 'bad channel or role' });
@@ -125,7 +199,7 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') { await pull(pool, res, { channel, role, url }); return; }
-    if (req.method === 'POST') { await push(pool, req, res, { channel, role }); return; }
+    if (req.method === 'POST') { await push(pool, req, res, { channel, role, tenantId }); return; }
     // Read and write are the only two verbs this relay has. Everything else is
     // refused by name rather than falling through to a default.
     res.status(405).json({ error: 'relay accepts GET (pull) and POST (send)' });
@@ -208,7 +282,7 @@ async function pull(pool, res, { channel, role, url }) {
   });
 }
 
-async function push(pool, req, res, { channel, role }) {
+async function push(pool, req, res, { channel, role, tenantId = null }) {
   const payload = await readJson(req);
   if (!payload.ok) { res.status(400).json({ error: payload.reason }); return; }
 
@@ -225,10 +299,18 @@ async function push(pool, req, res, { channel, role }) {
 
   // The sender is taken from the AUTHENTICATED REQUEST, never from the payload.
   // A caller that labels itself the other role does not get to impersonate it.
-  const { rows } = await pool.query(
-    'INSERT INTO helmion_relay (channel, sender, body) VALUES ($1, $2, $3) RETURNING id, created_at',
-    [channel, role, body],
-  );
+  // Hosted mode also stamps the resolved tenant (sql/store/005's
+  // tenant_id) so audits never reverse the derived channel name; compat
+  // mode runs the original INSERT byte-for-byte.
+  const { rows } = tenantId
+    ? await pool.query(
+        'INSERT INTO helmion_relay (channel, sender, body, tenant_id) VALUES ($1, $2, $3, $4) RETURNING id, created_at',
+        [channel, role, body, tenantId],
+      )
+    : await pool.query(
+        'INSERT INTO helmion_relay (channel, sender, body) VALUES ($1, $2, $3) RETURNING id, created_at',
+        [channel, role, body],
+      );
   res.status(200).json({
     ok: true,
     id: Number(rows[0].id),
