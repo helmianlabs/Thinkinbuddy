@@ -10,8 +10,9 @@ import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
 import { getKey } from '../../lib/userKeys.js';
 import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 import { completeText, hasTextLlm, keyForProvider, preferredBrain } from '../../lib/llm.js';
-import { resolveTenant, activeTenantId } from '../../lib/tenant.js';
+import { resolveTenant, activeTenantId, tenantEnforced } from '../../lib/tenant.js';
 import { costFor, meterGate, denyMetering, recordMetered, getUsageDb } from '../../lib/usage.js';
+import { getProfile, getProfileDb, profileSafety } from '../../lib/profile.js';
 import { randomUUID } from 'node:crypto';
 
 // Payload ceilings. A single request cannot be made expensive: input tokens are
@@ -74,12 +75,34 @@ export default async function handler(req, res) {
     : Array.isArray(lastUser?.content)
       ? lastUser.content.map((b) => (typeof b === 'string' ? b : b?.text || '')).join(' ')
       : '';
-  // Safety posture for this request (parent safety mode / minor age
-  // band, read from the request's existing plumbing — lib/safety.js).
-  // When it applies, moderation fails CLOSED and the kid safety core
-  // joins the system prompt: unscreened never reaches the LLM.
-  const safetyIn = safetyInputsFromRequest(req);
-  const safety = safetyDecision(safetyIn);
+  // Safety posture for this request. Hosted mode (tenant enforcement
+  // on): the tenant PROFILE is the authority — when the tenant has a
+  // profile row, its safety_mode/age_band decide (lib/profile.js
+  // profileSafety, the same helper the wiring tests pin), and the
+  // request's own safety fields are ignored. With no profile row, and
+  // in compat mode, the request plumbing decides exactly as before this
+  // bite (lib/safety.js safetyInputsFromRequest) and NO profile query
+  // is made in compat mode at all. When safety applies, moderation
+  // fails CLOSED and the kid safety core joins the system prompt:
+  // unscreened never reaches the LLM.
+  const chatTenant = resolveTenant(req);
+  const chatTenantId = activeTenantId(chatTenant);
+  let safetyIn = safetyInputsFromRequest(req);
+  let safety = safetyDecision(safetyIn);
+  if (tenantEnforced() && chatTenantId) {
+    try {
+      const profile = await getProfile(getProfileDb, chatTenantId);
+      if (profile) {
+        safetyIn = {
+          safetyMode: profile.safety_mode === true,
+          ageBand: profile.age_band ?? null,
+        };
+        safety = profileSafety(profile);
+      }
+    } catch (e) {
+      console.error('[chat] profile load failed — request safety inputs used:', e?.message || e);
+    }
+  }
   const mod = await isAllowed(lastUserText, getKey(req, 'OPENAI_API_KEY'), { failClosed: safety.failClosed });
   if (!mod.allowed) {
     console.warn('[chat] user message blocked by moderation:', mod.reason);
@@ -92,7 +115,6 @@ export default async function handler(req, res) {
   // exhausted). If the request runs on the user's own key for their
   // chosen brain (BYO), or in compat mode, meterGate skips metering
   // entirely and makes no DB call.
-  const chatTenantId = activeTenantId(resolveTenant(req));
   const chatBrain = preferredBrain(req);
   const chatReqId = randomUUID();
   const chatEst = costFor('chat');

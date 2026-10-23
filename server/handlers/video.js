@@ -21,6 +21,7 @@ import { resolveHandlerTenant } from '../../lib/tenant.js';
 import { costFor, meterGate, denyMetering, recordMetered, getUsageDb } from '../../lib/usage.js';
 import { randomUUID } from 'node:crypto';
 import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
+import { getProfile, getProfileDb, profileSafety } from '../../lib/profile.js';
 import { saveMediaMemory } from '../../lib/mediaMemory.js';
 
 export const config = { maxDuration: 300 };
@@ -134,7 +135,18 @@ export default async function handler(req, res) {
   if (!runwayKey) return res.status(500).json({ result: 'RUNWAY_API_KEY not configured' });
   if (!blobToken) return res.status(500).json({ result: 'BLOB_READ_WRITE_TOKEN not configured' });
 
-  const { failClosed } = safetyDecision(safetyInputsFromRequest(req));
+  // Hosted mode: the tenant profile decides fail-closed (lib/profile.js
+  // profileSafety) when a profile row exists; request inputs are the
+  // fallback, and compat mode never queries a profile.
+  let { failClosed } = safetyDecision(safetyInputsFromRequest(req));
+  if (resolvedTenant.enforced && resolvedTenant.tenantId) {
+    try {
+      const profile = await getProfile(getProfileDb, resolvedTenant.tenantId);
+      if (profile) ({ failClosed } = profileSafety(profile));
+    } catch (e) {
+      console.error('[video] profile load failed — request safety inputs used:', e?.message || e);
+    }
+  }
   const mod = await isAllowed(prompt, openaiKey, { failClosed });
   if (!mod.allowed) {
     console.warn('[video] prompt blocked by moderation:', mod.reason);

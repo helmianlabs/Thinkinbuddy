@@ -1,7 +1,8 @@
 import { resolveKey, getKey, missingKeyError } from '../../lib/userKeys.js';
 import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
-import { requireTenant } from '../../lib/tenant.js';
+import { requireTenant, tenantEnforced } from '../../lib/tenant.js';
 import { costFor, meterGate, denyMetering, recordMetered, getUsageDb } from '../../lib/usage.js';
+import { getProfile, getProfileDb, profileSafety } from '../../lib/profile.js';
 import { randomUUID } from 'node:crypto';
 import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 
@@ -37,7 +38,18 @@ export default async function handler(req, res) {
   // gap 3 — this endpoint used to speak anything verbatim). Blocked
   // text gets the repo's standard refusal shape; nothing is sent to
   // ElevenLabs. Fails closed when safety applies to this request.
-  const safety = safetyDecision(safetyInputsFromRequest(req));
+  // Hosted mode: the tenant profile decides safety (lib/profile.js
+  // profileSafety) when a profile row exists; the request inputs are
+  // the fallback, and compat mode never queries a profile.
+  let safety = safetyDecision(safetyInputsFromRequest(req));
+  if (tenantEnforced() && tenant?.tenantId) {
+    try {
+      const profile = await getProfile(getProfileDb, tenant.tenantId);
+      if (profile) safety = profileSafety(profile);
+    } catch (e) {
+      console.error('[speak] profile load failed — request safety inputs used:', e?.message || e);
+    }
+  }
   const mod = await isAllowed(text, getKey(req, 'OPENAI_API_KEY'), { failClosed: safety.failClosed });
   if (!mod.allowed) {
     console.warn('[speak] text blocked by moderation:', mod.reason);
