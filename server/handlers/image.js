@@ -9,7 +9,10 @@
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../../lib/security.js';
 import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
-import { getKey } from '../../lib/userKeys.js';
+import { resolveKey } from '../../lib/userKeys.js';
+import { resolveHandlerTenant } from '../../lib/tenant.js';
+import { costFor, meterGate, denyMetering, recordMetered, getUsageDb } from '../../lib/usage.js';
+import { randomUUID } from 'node:crypto';
 import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 import { saveMediaMemory } from '../../lib/mediaMemory.js';
 
@@ -29,6 +32,15 @@ export default async function handler(req, res) {
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
 
   const userId = req.body?.userId || req.query?.userId || 'anonymous';
+  // Tenant for metering (lib/tenant.js, bite-1b pattern): compat mode
+  // resolves ok with no scoping tenant and the metering block below is
+  // a no-op; enforced (hosted) mode requires a session token or the
+  // tenant id carried as userId.
+  const resolvedTenant = resolveHandlerTenant(req, userId);
+  if (!resolvedTenant.ok) {
+    return res.status(400).json({ error: 'tenant identity required (session token or tenant user_id)' });
+  }
+
 
   // Aspect: default = portrait phone fill (the widget displays full-screen on
   // mobile). User / agent can override via body.aspect = 'square' | 'portrait'
@@ -46,7 +58,7 @@ export default async function handler(req, res) {
   if (rawSize && VALID_SIZES.has(rawSize)) size = rawSize;
   else if (ASPECT_TO_SIZE[rawAspect]) size = ASPECT_TO_SIZE[rawAspect];
 
-  const apiKey = getKey(req, 'OPENAI_API_KEY');
+  const { key: apiKey, source: keySource } = resolveKey(req, 'OPENAI_API_KEY');
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey)    return res.status(500).json({ result: 'OPENAI_API_KEY not configured' });
   if (!blobToken) return res.status(500).json({ result: 'BLOB_READ_WRITE_TOKEN not configured' });
@@ -58,6 +70,17 @@ export default async function handler(req, res) {
     console.warn('[image] prompt blocked by moderation:', mod.reason);
     return res.status(200).json({ result: SAFE_REFUSAL });
   }
+
+
+  // Usage metering (hosted model, lib/usage.js): enforced mode + our
+  // server key -> the tenant's bucket must cover the estimate BEFORE
+  // the provider call (402 credits_exhausted, no provider call made).
+  // Compat mode and BYO user keys skip metering entirely — see
+  // shouldMeter in lib/usage.js.
+  const imgReqId = randomUUID();
+  const imgEst = costFor('image');
+  const imgGate = await meterGate({ db: getUsageDb, tenantId: resolvedTenant.tenantId, keySource: keySource, estCredits: imgEst });
+  if (!imgGate.allowed) return denyMetering(res, imgGate);
 
   try {
     const response = await fetch('https://api.openai.com/v1/images/generations', {
@@ -117,6 +140,11 @@ export default async function handler(req, res) {
     } else {
       return res.status(502).json({ result: 'OpenAI returned no image data' });
     }
+
+    await recordMetered(imgGate, getUsageDb, {
+      tenantId: resolvedTenant.tenantId, provider: 'openai', action: 'image',
+      units: 1, credits: imgEst, requestId: imgReqId,
+    });
 
     // Tool-call response: ElevenLabs reads `result` and speaks it; the widget
     // separately polls /api/latest-image and shows the picture once it lands.

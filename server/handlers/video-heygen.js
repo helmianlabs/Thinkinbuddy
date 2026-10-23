@@ -12,7 +12,10 @@
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../../lib/security.js';
 import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
-import { getKey } from '../../lib/userKeys.js';
+import { getKey, resolveKey } from '../../lib/userKeys.js';
+import { resolveHandlerTenant } from '../../lib/tenant.js';
+import { costFor, meterGate, denyMetering, recordMetered, getUsageDb } from '../../lib/usage.js';
+import { randomUUID } from 'node:crypto';
 import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 
 const blobPrefix = (userId) => `thinkinbuddy/videos/${userId}/`;
@@ -37,12 +40,21 @@ export default async function handler(req, res) {
   if (!prompt) return res.status(400).json({ error: 'prompt (script) required' });
 
   const userId = req.body?.userId || req.query?.userId || 'anonymous';
+  // Tenant for metering (lib/tenant.js, bite-1b pattern): compat mode
+  // resolves ok with no scoping tenant and the metering block below is
+  // a no-op; enforced (hosted) mode requires a session token or the
+  // tenant id carried as userId.
+  const resolvedTenant = resolveHandlerTenant(req, userId);
+  if (!resolvedTenant.ok) {
+    return res.status(400).json({ error: 'tenant identity required (session token or tenant user_id)' });
+  }
+
   const avatarId = req.body?.avatarId || DEFAULT_AVATAR_ID;
   const voiceId  = req.body?.voiceId  || DEFAULT_VOICE_ID;
   const aspect = (req.body?.aspect || 'portrait').toLowerCase();
   const dim = ASPECT_TO_DIM[aspect] || ASPECT_TO_DIM.portrait;
 
-  const apiKey = process.env.HEYGEN_API_KEY;
+  const { key: apiKey, source: keySource } = resolveKey(req, 'HEYGEN_API_KEY');
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey)    return res.status(500).json({ result: 'HEYGEN_API_KEY not configured (get one at https://app.heygen.com/settings/api-key)' });
   if (!blobToken) return res.status(500).json({ result: 'BLOB_READ_WRITE_TOKEN not configured' });
@@ -56,6 +68,23 @@ export default async function handler(req, res) {
     console.warn('[video-heygen] prompt blocked by moderation:', mod.reason);
     return res.status(200).json({ result: SAFE_REFUSAL });
   }
+
+
+  // HeyGen bills per generated minute and the length is set by the
+  // script (capped at 1500 chars at the provider call): estimate the
+  // spoken seconds at ~13 chars/sec (~780 chars/min) for the bucket
+  // check; the 30-credit video floor covers short scripts.
+  const heygenEstSeconds = Math.max(10, Math.ceil(prompt.slice(0, 1500).length / 13));
+
+  // Usage metering (hosted model, lib/usage.js): enforced mode + our
+  // server key -> the tenant's bucket must cover the estimate BEFORE
+  // the provider call (402 credits_exhausted, no provider call made).
+  // Compat mode and BYO user keys skip metering entirely — see
+  // shouldMeter in lib/usage.js.
+  const heygenReqId = randomUUID();
+  const heygenEst = costFor('video', { seconds: heygenEstSeconds });
+  const heygenGate = await meterGate({ db: getUsageDb, tenantId: resolvedTenant.tenantId, keySource: keySource, estCredits: heygenEst });
+  if (!heygenGate.allowed) return denyMetering(res, heygenGate);
 
   try {
     // Step 1 — kick off generation.
@@ -132,6 +161,11 @@ export default async function handler(req, res) {
     } catch (err) {
       console.error('[video-heygen] sidecar write failed (non-fatal):', err?.message || err);
     }
+
+    await recordMetered(heygenGate, getUsageDb, {
+      tenantId: resolvedTenant.tenantId, provider: 'heygen', action: 'video',
+      units: heygenEstSeconds, credits: heygenEst, requestId: heygenReqId,
+    });
 
     return res.status(200).json({
       result: 'Video generated.',

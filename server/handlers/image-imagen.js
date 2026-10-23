@@ -9,7 +9,10 @@
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../../lib/security.js';
 import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
-import { getKey } from '../../lib/userKeys.js';
+import { getKey, resolveKey } from '../../lib/userKeys.js';
+import { resolveHandlerTenant } from '../../lib/tenant.js';
+import { costFor, meterGate, denyMetering, recordMetered, getUsageDb } from '../../lib/usage.js';
+import { randomUUID } from 'node:crypto';
 import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 
 const MODEL = 'imagen-4.0-generate-001';
@@ -32,10 +35,19 @@ export default async function handler(req, res) {
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
 
   const userId = req.body?.userId || req.query?.userId || 'anonymous';
+  // Tenant for metering (lib/tenant.js, bite-1b pattern): compat mode
+  // resolves ok with no scoping tenant and the metering block below is
+  // a no-op; enforced (hosted) mode requires a session token or the
+  // tenant id carried as userId.
+  const resolvedTenant = resolveHandlerTenant(req, userId);
+  if (!resolvedTenant.ok) {
+    return res.status(400).json({ error: 'tenant identity required (session token or tenant user_id)' });
+  }
+
   const aspect = (req.body?.aspect || 'portrait').toLowerCase();
   const ratio = ASPECT_TO_RATIO[aspect] || ASPECT_TO_RATIO.portrait;
 
-  const apiKey = process.env.GOOGLE_API_KEY;
+  const { key: apiKey, source: keySource } = resolveKey(req, 'GOOGLE_API_KEY');
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey)    return res.status(500).json({ result: 'GOOGLE_API_KEY not configured (get from https://aistudio.google.com/app/apikey)' });
   if (!blobToken) return res.status(500).json({ result: 'BLOB_READ_WRITE_TOKEN not configured' });
@@ -47,6 +59,17 @@ export default async function handler(req, res) {
     console.warn('[image-imagen] prompt blocked by moderation:', mod.reason);
     return res.status(200).json({ result: SAFE_REFUSAL });
   }
+
+
+  // Usage metering (hosted model, lib/usage.js): enforced mode + our
+  // server key -> the tenant's bucket must cover the estimate BEFORE
+  // the provider call (402 credits_exhausted, no provider call made).
+  // Compat mode and BYO user keys skip metering entirely — see
+  // shouldMeter in lib/usage.js.
+  const imagenReqId = randomUUID();
+  const imagenEst = costFor('image');
+  const imagenGate = await meterGate({ db: getUsageDb, tenantId: resolvedTenant.tenantId, keySource: keySource, estCredits: imagenEst });
+  if (!imagenGate.allowed) return denyMetering(res, imagenGate);
 
   try {
     const response = await fetch(
@@ -94,6 +117,11 @@ export default async function handler(req, res) {
     } catch (err) {
       console.error('[image-imagen] sidecar write failed (non-fatal):', err?.message || err);
     }
+
+    await recordMetered(imagenGate, getUsageDb, {
+      tenantId: resolvedTenant.tenantId, provider: 'google', action: 'image',
+      units: 1, credits: imagenEst, requestId: imagenReqId,
+    });
 
     return res.status(200).json({
       result: 'Image generated.',

@@ -1,6 +1,8 @@
 import { resolveKey, getKey, missingKeyError } from '../../lib/userKeys.js';
 import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
 import { requireTenant } from '../../lib/tenant.js';
+import { costFor, meterGate, denyMetering, recordMetered, getUsageDb } from '../../lib/usage.js';
+import { randomUUID } from 'node:crypto';
 import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 
 // Fallback voice, used when the caller names none. Unchanged from the
@@ -42,8 +44,19 @@ export default async function handler(req, res) {
     return res.status(200).json({ result: SAFE_REFUSAL });
   }
 
-  const { key: apiKey } = resolveKey(req, 'ELEVENLABS_API_KEY');
+  const { key: apiKey, source: keySource } = resolveKey(req, 'ELEVENLABS_API_KEY');
   if (!apiKey) return res.status(400).json(missingKeyError('ELEVENLABS_API_KEY'));
+
+  // Usage metering (hosted model, lib/usage.js): enforced mode + our
+  // server ElevenLabs key -> bucket check BEFORE the TTS call (402 when
+  // exhausted). A user-supplied ElevenLabs key (BYO) or compat mode
+  // skips metering entirely. Cost is per 100 chars of the final text.
+  const speakReqId = randomUUID();
+  const speakEst = costFor('speak', { text });
+  const speakGate = await meterGate({
+    db: getUsageDb, tenantId: tenant.tenantId, keySource, estCredits: speakEst,
+  });
+  if (!speakGate.allowed) return denyMetering(res, speakGate);
 
   // Accept only an id-shaped value — this is interpolated into the URL.
   const voiceId = (typeof requestedVoiceId === 'string' && /^[A-Za-z0-9]{16,40}$/.test(requestedVoiceId))
@@ -70,6 +83,10 @@ export default async function handler(req, res) {
   }
 
   const audioBuffer = await response.arrayBuffer();
+  await recordMetered(speakGate, getUsageDb, {
+    tenantId: tenant.tenantId, provider: 'elevenlabs', action: 'speak',
+    units: text.length, credits: speakEst, requestId: speakReqId,
+  });
   res.setHeader('Content-Type', 'audio/mpeg');
   res.setHeader('Content-Length', audioBuffer.byteLength);
   res.send(Buffer.from(audioBuffer));

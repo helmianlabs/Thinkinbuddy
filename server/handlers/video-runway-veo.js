@@ -12,7 +12,10 @@
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../../lib/security.js';
 import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
-import { getKey } from '../../lib/userKeys.js';
+import { getKey, resolveKey } from '../../lib/userKeys.js';
+import { resolveHandlerTenant } from '../../lib/tenant.js';
+import { costFor, meterGate, denyMetering, recordMetered, getUsageDb } from '../../lib/usage.js';
+import { randomUUID } from 'node:crypto';
 import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 import { saveMediaMemory } from '../../lib/mediaMemory.js';
 
@@ -41,13 +44,22 @@ export default async function handler(req, res) {
   if (!prompt) return res.status(400).json({ result: 'prompt required' });
 
   const userId = req.body?.userId || req.query?.userId || 'anonymous';
+  // Tenant for metering (lib/tenant.js, bite-1b pattern): compat mode
+  // resolves ok with no scoping tenant and the metering block below is
+  // a no-op; enforced (hosted) mode requires a session token or the
+  // tenant id carried as userId.
+  const resolvedTenant = resolveHandlerTenant(req, userId);
+  if (!resolvedTenant.ok) {
+    return res.status(400).json({ error: 'tenant identity required (session token or tenant user_id)' });
+  }
+
   let duration = Number(req.body?.duration || req.query?.duration || DEFAULT_DURATION);
   if (!ALLOWED_DURATIONS.includes(duration)) {
     // Snap to nearest allowed value rather than failing
     duration = duration >= 7 ? 8 : (duration >= 5 ? 6 : 4);
   }
 
-  const apiKey = process.env.RUNWAY_API_KEY;
+  const { key: apiKey, source: keySource } = resolveKey(req, 'RUNWAY_API_KEY');
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey)    return res.status(500).json({ result: 'RUNWAY_API_KEY not configured' });
   if (!blobToken) return res.status(500).json({ result: 'BLOB_READ_WRITE_TOKEN not configured' });
@@ -61,6 +73,17 @@ export default async function handler(req, res) {
     console.warn('[video-runway-veo] prompt blocked by moderation:', mod.reason);
     return res.status(200).json({ result: SAFE_REFUSAL });
   }
+
+
+  // Usage metering (hosted model, lib/usage.js): enforced mode + our
+  // server key -> the tenant's bucket must cover the estimate BEFORE
+  // the provider call (402 credits_exhausted, no provider call made).
+  // Compat mode and BYO user keys skip metering entirely — see
+  // shouldMeter in lib/usage.js.
+  const veoReqId = randomUUID();
+  const veoEst = costFor('video', { seconds: duration });
+  const veoGate = await meterGate({ db: getUsageDb, tenantId: resolvedTenant.tenantId, keySource: keySource, estCredits: veoEst });
+  if (!veoGate.allowed) return denyMetering(res, veoGate);
 
   try {
     // 1) Kick off the generation task
@@ -159,6 +182,11 @@ export default async function handler(req, res) {
     saveMediaMemory({ userId, type: 'video', blobUrl: blob.url, prompt, createdAt: ts }).catch(
       (e) => console.error('[video] saveMediaMemory failed (non-fatal):', e?.message || e)
     );
+
+    await recordMetered(veoGate, getUsageDb, {
+      tenantId: resolvedTenant.tenantId, provider: 'runway', action: 'video',
+      units: duration, credits: veoEst, requestId: veoReqId,
+    });
 
     return res.status(200).json({
       result: `Video generated (${duration}s).`,

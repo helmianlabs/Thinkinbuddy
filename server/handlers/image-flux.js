@@ -9,7 +9,10 @@
 import { put } from '@vercel/blob';
 import { requireWebhookSecret } from '../../lib/security.js';
 import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
-import { getKey } from '../../lib/userKeys.js';
+import { getKey, resolveKey } from '../../lib/userKeys.js';
+import { resolveHandlerTenant } from '../../lib/tenant.js';
+import { costFor, meterGate, denyMetering, recordMetered, getUsageDb } from '../../lib/usage.js';
+import { randomUUID } from 'node:crypto';
 import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 
 // Replicate model slugs for the three FLUX tiers.
@@ -40,12 +43,21 @@ export default async function handler(req, res) {
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
 
   const userId = req.body?.userId || req.query?.userId || 'anonymous';
+  // Tenant for metering (lib/tenant.js, bite-1b pattern): compat mode
+  // resolves ok with no scoping tenant and the metering block below is
+  // a no-op; enforced (hosted) mode requires a session token or the
+  // tenant id carried as userId.
+  const resolvedTenant = resolveHandlerTenant(req, userId);
+  if (!resolvedTenant.ok) {
+    return res.status(400).json({ error: 'tenant identity required (session token or tenant user_id)' });
+  }
+
   const aspect = (req.body?.aspect || 'portrait').toLowerCase();
   const aspect_ratio = ASPECT_TO_RATIO[aspect] || ASPECT_TO_RATIO.portrait;
   const quality = (req.body?.quality || 'fast').toLowerCase();
   const model = QUALITY_TO_MODEL[quality] || QUALITY_TO_MODEL.fast;
 
-  const apiKey = process.env.REPLICATE_API_TOKEN;
+  const { key: apiKey, source: keySource } = resolveKey(req, 'REPLICATE_API_TOKEN');
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey)    return res.status(500).json({ result: 'REPLICATE_API_TOKEN not configured (get from https://replicate.com/account/api-tokens)' });
   if (!blobToken) return res.status(500).json({ result: 'BLOB_READ_WRITE_TOKEN not configured' });
@@ -57,6 +69,17 @@ export default async function handler(req, res) {
     console.warn('[image-flux] prompt blocked by moderation:', mod.reason);
     return res.status(200).json({ result: SAFE_REFUSAL });
   }
+
+
+  // Usage metering (hosted model, lib/usage.js): enforced mode + our
+  // server key -> the tenant's bucket must cover the estimate BEFORE
+  // the provider call (402 credits_exhausted, no provider call made).
+  // Compat mode and BYO user keys skip metering entirely — see
+  // shouldMeter in lib/usage.js.
+  const fluxReqId = randomUUID();
+  const fluxEst = costFor('image');
+  const fluxGate = await meterGate({ db: getUsageDb, tenantId: resolvedTenant.tenantId, keySource: keySource, estCredits: fluxEst });
+  if (!fluxGate.allowed) return denyMetering(res, fluxGate);
 
   try {
     // Replicate uses model-versioned predictions; the "models" path resolves the
@@ -131,6 +154,11 @@ export default async function handler(req, res) {
     } catch (err) {
       console.error('[image-flux] sidecar write failed (non-fatal):', err?.message || err);
     }
+
+    await recordMetered(fluxGate, getUsageDb, {
+      tenantId: resolvedTenant.tenantId, provider: 'replicate', action: 'image',
+      units: 1, credits: fluxEst, requestId: fluxReqId,
+    });
 
     return res.status(200).json({
       result: 'Image generated.',

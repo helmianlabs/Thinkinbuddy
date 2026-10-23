@@ -9,7 +9,10 @@ import { applyBrowserCors, requireBrowserFetch } from '../../lib/security.js';
 import { isAllowed, SAFE_REFUSAL } from '../../lib/moderation.js';
 import { getKey } from '../../lib/userKeys.js';
 import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
-import { completeText, hasTextLlm } from '../../lib/llm.js';
+import { completeText, hasTextLlm, keyForProvider, preferredBrain } from '../../lib/llm.js';
+import { resolveTenant, activeTenantId } from '../../lib/tenant.js';
+import { costFor, meterGate, denyMetering, recordMetered, getUsageDb } from '../../lib/usage.js';
+import { randomUUID } from 'node:crypto';
 
 // Payload ceilings. A single request cannot be made expensive: input tokens are
 // what cost money here (max_tokens caps only the OUTPUT at 400), so an
@@ -83,6 +86,24 @@ export default async function handler(req, res) {
     return res.status(200).json({ reply: "Let's keep it friendly — I'm not going there. What else is on your mind?" });
   }
 
+  // Usage metering (hosted model, lib/usage.js): enforced mode + a
+  // server (env) key for the chosen brain -> the tenant's monthly
+  // bucket must cover this message BEFORE the LLM call (402 when
+  // exhausted). If the request runs on the user's own key for their
+  // chosen brain (BYO), or in compat mode, meterGate skips metering
+  // entirely and makes no DB call.
+  const chatTenantId = activeTenantId(resolveTenant(req));
+  const chatBrain = preferredBrain(req);
+  const chatReqId = randomUUID();
+  const chatEst = costFor('chat');
+  const chatGate = await meterGate({
+    db: getUsageDb,
+    tenantId: chatTenantId,
+    keySource: keyForProvider(req, chatBrain).source,
+    estCredits: chatEst,
+  });
+  if (!chatGate.allowed) return denyMetering(res, chatGate);
+
   const systemPrompt = buildSystemPrompt({
     buddyName: userContext?.buddyName,
     userName: userContext?.name,
@@ -109,6 +130,13 @@ export default async function handler(req, res) {
         return `${role}: ${c}`;
       }).join('\n\n'),
     })) || 'No response.';
+
+    // The provider call succeeded — the cost is incurred even if the
+    // output gate below replaces the reply, so record it now.
+    await recordMetered(chatGate, getUsageDb, {
+      tenantId: chatTenantId, provider: chatBrain, action: 'chat',
+      units: 1, credits: chatEst, requestId: chatReqId,
+    });
 
     // Output gate (audit §2 gap 4): screen the buddy's reply BEFORE it
     // leaves — input-only moderation let anything the model produced
