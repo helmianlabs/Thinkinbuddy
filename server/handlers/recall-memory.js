@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   // back. In COMPAT mode (no SESSION_SECRET — today's live deployment)
   // behavior is unchanged: userId keys the lookup exactly as before.
   //
-  // Tool-auth gate NO-OP UNTIL ENFORCE_TOOL_AUTH=1 — see
+  // Tool-auth gate NO-OP UNTIL ENFORCE_TOOL_AUTH is truthy — see
   // lib/security.js:requireToolAuth. (Independent of tenant enforcement.)
   if (!requireToolAuth(req, res)) return;
 
