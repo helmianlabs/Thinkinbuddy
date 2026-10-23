@@ -1,6 +1,50 @@
 // Single router for the Thinkinbuddy API so the app fits Vercel Hobby's 12-function limit.
 // /api/<name>[/sub/path] -> server/handlers/<name>.js (same URLs as before).
 // api/conversation-webhook.js stays its own function because it needs the raw body (bodyParser: false).
+
+// ─── Per-route function config (audit fix-list item 6) ──────────────────
+// Handlers used to declare their own `export const config` (maxDuration,
+// body-size limits). Those exports are dead in this layout: Vercel reads
+// function config from the ACTUAL function file — this router — never
+// from a module the router dynamically imports. The values every handler
+// declared are therefore lifted here, route by route, so they are
+// visible, testable, and survive a future split back into per-route
+// functions.
+//
+// One consolidated function can carry only ONE platform-level config,
+// so the exported `config` below takes the maximum maxDuration (300s)
+// and the largest body limit (Actionable's 25 MB) across the routed
+// handlers. ROUTE_FUNCTION_CONFIG preserves each route's own declared
+// values exactly; ROUTE_MAX_DURATIONS is the maxDuration projection the
+// sweep test checks against every handler that declares one. A route's
+// lower individual ceiling cannot be enforced separately while all
+// routes share this one function — that needs per-route functions.
+export const ROUTE_FUNCTION_CONFIG = {
+  'actionable': { api: { bodyParser: { sizeLimit: '25mb' } } },
+  'diary': { api: { bodyParser: { sizeLimit: '10mb' } } },
+  'image-flux': { maxDuration: 120 },
+  'mcp': { api: { bodyParser: { sizeLimit: '1mb' } } },
+  'relay-http': { maxDuration: 15 },
+  'video': { maxDuration: 300 },
+  'video-runway': { maxDuration: 300 },
+  'video-runway-veo': { maxDuration: 300 },
+};
+
+export const ROUTE_MAX_DURATIONS = Object.freeze(Object.fromEntries(
+  Object.entries(ROUTE_FUNCTION_CONFIG)
+    .filter(([, config]) => Number.isFinite(config.maxDuration))
+    .map(([route, config]) => [route, config.maxDuration]),
+));
+
+// Platform config for THIS function (the only one Vercel reads for every
+// route above): the maximum duration and largest body limit any routed
+// handler declared. vercel.json's functions entry for this file carries
+// the same 300s maxDuration.
+export const config = {
+  maxDuration: 300,
+  api: { bodyParser: { sizeLimit: '25mb' } },
+};
+
 const routes = {
   'actionable': () => import('../server/handlers/actionable.js'),
   'actionable-auth': () => import('../server/handlers/actionable-auth.js'),
@@ -22,7 +66,6 @@ const routes = {
   'extract-memories': () => import('../server/handlers/extract-memories.js'),
   'image': () => import('../server/handlers/image.js'),
   'image-flux': () => import('../server/handlers/image-flux.js'),
-  'image-imagen': () => import('../server/handlers/image-imagen.js'),
   'latest-image': () => import('../server/handlers/latest-image.js'),
   'latest-video': () => import('../server/handlers/latest-video.js'),
   'mcp': () => import('../server/handlers/mcp.js'),
@@ -43,7 +86,6 @@ const routes = {
   'video-heygen': () => import('../server/handlers/video-heygen.js'),
   'video-runway': () => import('../server/handlers/video-runway.js'),
   'video-runway-veo': () => import('../server/handlers/video-runway-veo.js'),
-  'video-sora': () => import('../server/handlers/video-sora.js'),
   'voices': () => import('../server/handlers/voices.js'),
 };
 
@@ -57,6 +99,14 @@ export default async function handler(req, res) {
     return res.end(JSON.stringify({ error: 'Not found', path: pathname }));
   }
   if (req.query) delete req.query.path;
+  // Make the route's declared config visible to the handler and to
+  // anyone debugging a timeout from response headers. (Informational:
+  // the platform ceiling is the exported `config` above.)
+  req.routeFunctionConfig = ROUTE_FUNCTION_CONFIG[name] || {};
+  req.routeMaxDuration = ROUTE_MAX_DURATIONS[name] ?? null;
+  if (req.routeMaxDuration && typeof res.setHeader === 'function') {
+    res.setHeader('X-Route-Max-Duration', String(req.routeMaxDuration));
+  }
   const mod = await load();
   return mod.default(req, res);
 }
