@@ -22,7 +22,9 @@ import { safetyDecision, safetyInputsFromRequest } from '../../lib/safety.js';
 //     promptImage (image-to-video only)
 //   - Pure text-to-video is NOT enabled on this account.
 //
-// For pure text prompts → use /api/video-sora (works on Troy's OpenAI tier).
+// For pure text prompts → use the Veo paths (/api/video-runway-veo, or
+// /api/video, which generates a start frame first). The old Sora route was
+// removed in Oct 2026 when OpenAI retired the Videos API.
 // To wake Runway up, either upgrade the Runway plan to one that includes
 // text-to-video, OR call this route with a promptImage URL for image-to-video.
 const DEFAULT_MODEL = 'gen4_turbo';
