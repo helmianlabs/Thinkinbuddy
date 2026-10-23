@@ -1,18 +1,23 @@
 # ThinkinBuddy — technical overview
 
 **ThinkinBuddy** is a standalone, voice-first AI companion and tutor — a
-React Native/Capacitor Android app (and browser PWA) that runs over WiFi or
-cellular with no desktop dependency.
+Capacitor app (Android today; an iOS project is scaffolded in this repo)
+and browser PWA that runs over WiFi or cellular with no desktop
+dependency.
 
 ## Core architecture
 
-- Real-time conversational voice via ElevenLabs (Claude Sonnet 4.6 as the
-  underlying LLM), with a live tool-calling layer — the agent can search the
-  web, browse URLs, generate images (OpenAI gpt-image-2, with Replicate Flux
-  and Google Imagen wired in), generate video (Runway gen4_turbo live,
-  OpenAI Sora and HeyGen wired in), and set alarms, all mid-conversation via
-  10 server-to-server webhook tools gated by a shared-secret header — no
-  browser CORS exposure on the generation endpoints.
+- Real-time conversational voice via ElevenLabs (the voice agent's LLM is
+  configured in ElevenLabs, not in this repo), with a live tool-calling
+  layer — the agent can search the web, browse URLs, generate images
+  (OpenAI gpt-image-2, with Replicate Flux also routed), generate video
+  (Runway gen4_turbo image-to-video live; Google Veo and HeyGen avatars
+  also routed), and set alarms, all mid-conversation via server-to-server
+  webhook tools gated by a shared-secret header — no browser CORS
+  exposure on the generation endpoints. Text chat additionally routes
+  through `lib/llm.js` to user-selectable providers; the code defaults
+  are Gemini `gemini-3.5-flash-lite`, OpenAI `gpt-4.1-mini`, Anthropic
+  `claude-haiku-4-5`, and xAI `grok-3-mini` (all env-overridable).
 - **Persistent cross-session memory**: Neon Postgres + pgvector, OpenAI
   text-embedding-3-small embeddings, cosine-similarity recall blended with a
   recency decay. Facts the user shares get extracted and saved
@@ -26,19 +31,23 @@ cellular with no desktop dependency.
 - **8 age-scaled curricula** (finance, critical thinking, coding/AI/web
   design, leadership & business psychology, philosophy, psychology, college
   prep, academic writing) delivered via ElevenLabs' hosted Knowledge Base
-  with RAG retrieval available.
-- **Full session export**: Share sheet, PDF, Markdown, plain text, clipboard
+  with RAG retrieval available. The curricula live in the hosted KB; this
+  repo documents their structure in `docs/knowledge-base/README.md`.
+- **Full session export**: PDF, Markdown, plain text, clipboard
   — built from the live conversation transcript.
 - **Optional relay into a separate desktop multi-agent orchestration
-  system** (Helmion) — a fire-and-forget text side-channel that fails
-  silently closed, so the mobile app's core loop never depends on or blocks
-  on it.
-- **Safety architecture**: an immutable, jailbreak-resistant system-prompt
-  safety core (explicitly refuses sexual content, violence, self-harm,
-  illegal activity — audience is families/kids 6th grade+) that layers
-  underneath the tutoring personality, with pre-generation content
-  moderation on every image/video prompt before a provider call is even
-  made.
+  system** (Helmian, sold as the Helmian Connect tier) — per-tenant relay
+  channels with one-time 6-digit device pairing, plan-gated, and built as
+  a fire-and-forget text side-channel that fails silently closed, so the
+  mobile app's core loop never depends on or blocks on it.
+- **Safety architecture**: hardcoded guardrails in code, not just prompt
+  text — `BASE_GUARDRAILS` in `lib/personality.js` rides inside every
+  generated system prompt (audience is families/kids 6th grade+), and a
+  parent-controlled safety mode (`lib/safety.js`, `KID_SAFETY_CORE`) adds
+  stricter rules that a parent PIN locks in place. OpenAI Moderation
+  screens chat input and replies, and every image/video prompt before a
+  provider call is made; in safety mode a moderation outage blocks the
+  generation (fail-closed) instead of waving content through.
 
 ## Engineering maturity signals
 
@@ -49,7 +58,8 @@ cellular with no desktop dependency.
   opening it (`lib/security.js`).
 - Horizontal-scale-safe polling design over Vercel's stateless serverless
   model — no reliance on in-process memory across cold starts
-  (`api/latest-image.js`, `api/latest-video.js`).
+  (`server/handlers/latest-image.js`, `server/handlers/latest-video.js`,
+  served through the single `api/[...path].js` router).
 
 See `README.md` for the getting-started flow and `SETUP.md` for a full
 from-scratch reproduction in your own ElevenLabs/Neon/OpenAI accounts.
