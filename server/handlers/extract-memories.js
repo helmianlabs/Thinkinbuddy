@@ -18,6 +18,7 @@
 
 import { getPool, upsertExtractedFact } from './memory.js';
 import { completeText, hasTextLlm } from '../../lib/llm.js';
+import { resolveHandlerTenant } from '../../lib/tenant.js';
 
 // ---------------------------------------------------------------------------
 // PII filter + length cap — verbatim from spec lines 262-278.
@@ -180,7 +181,7 @@ function parseCandidates(raw) {
 // spec :360-455). Slice A adds that export to memory.js in parallel; if it isn't
 // available yet, fall back to upsertExtractedFact (one row per candidate, no
 // embedding-based dedup). Returns a normalized summary either way.
-async function persistCandidates(userId, candidates, conversationId, req) {
+async function persistCandidates(userId, candidates, conversationId, req, tenantId = null) {
   let saveMemoryCandidates = null;
   try {
     const mod = await import('./memory.js');
@@ -196,7 +197,7 @@ async function persistCandidates(userId, candidates, conversationId, req) {
     // LLM adapter for contradiction classification inside saveMemoryCandidates
     // (spec :457-468). Same Anthropic surface used above.
     const llm = (system, user) => completeText({ req, system, user, maxTokens: 16 });
-    const res = await saveMemoryCandidates(pool, userId, candidates, llm);
+    const res = await saveMemoryCandidates(pool, userId, candidates, llm, tenantId);
     return {
       path: 'saveMemoryCandidates',
       inserted: res?.inserted ?? 0,
@@ -217,6 +218,7 @@ async function persistCandidates(userId, candidates, conversationId, req) {
         value: c.content,
         importance: c.importance,
         sourceSession: conversationId,
+        tenantId,
       });
       persisted++;
       keys.push(out.subject);
@@ -231,13 +233,24 @@ async function persistCandidates(userId, candidates, conversationId, req) {
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { userId, conversationId } = req.body || {};
   if (!userId) return res.status(400).json({ error: 'userId required' });
   if (!conversationId) return res.status(400).json({ error: 'conversationId required' });
+
+  // Tenant wiring (store build — lib/tenant.js): extracted candidates
+  // are saved under the resolved tenant (session token, or the user_id
+  // value carrying the tenant id in hosted mode) — in ENFORCED mode an
+  // unresolvable tenant is a 400 rather than a write into a default
+  // tenant. COMPAT mode: tenantId null, persistence exactly as before.
+  const resolvedTenant = resolveHandlerTenant(req, userId);
+  if (!resolvedTenant.ok) {
+    return res.status(400).json({ error: 'tenant identity required (session token or tenant user_id)' });
+  }
+  const tenantId = resolvedTenant.tenantId;
 
   const elevenKey = process.env.ELEVENLABS_API_KEY;
   if (!elevenKey)    return res.status(500).json({ error: 'ELEVENLABS_API_KEY not set' });
@@ -265,7 +278,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, extracted: 0, reason: 'no durable facts' });
     }
 
-    const result = await persistCandidates(userId, candidates, conversationId, req);
+    const result = await persistCandidates(userId, candidates, conversationId, req, tenantId);
 
     return res.status(200).json({
       ok: true,

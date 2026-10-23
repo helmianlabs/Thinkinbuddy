@@ -17,6 +17,7 @@
 
 import { retrieveMemories } from './memory.js';
 import { requireToolAuth } from '../../lib/security.js';
+import { resolveHandlerTenant } from '../../lib/tenant.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -26,11 +27,18 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   // Two costs on every call: an OpenAI embedding (memory.js:115) and a read of
-  // whatever this userId has stored. Since genUserId() (index.html:1003-1008)
-  // returns the literal string 'troy' for everyone, the userId is not a secret
-  // and this endpoint would hand a stranger Troy's memories on request.
+  // whatever this userId has stored. The pre-wiring warning that stood here
+  // ("this endpoint would hand a stranger Troy's memories on request") is
+  // addressed by the tenant resolution below IN ENFORCED MODE: with
+  // SESSION_SECRET set, the caller must present a session token or the
+  // tenant id itself as userId (the ElevenLabs `user_id` dynamic variable
+  // carries the tenant id in hosted mode), and retrieveMemories filters
+  // memory_items by that tenant_id — another tenant's rows cannot come
+  // back. In COMPAT mode (no SESSION_SECRET — today's live deployment)
+  // behavior is unchanged: userId keys the lookup exactly as before.
   //
-  // NO-OP UNTIL ENFORCE_TOOL_AUTH=1 — see lib/security.js:requireToolAuth.
+  // Tool-auth gate NO-OP UNTIL ENFORCE_TOOL_AUTH=1 — see
+  // lib/security.js:requireToolAuth. (Independent of tenant enforcement.)
   if (!requireToolAuth(req, res)) return;
 
   const userId = req.body?.userId;
@@ -38,8 +46,13 @@ export default async function handler(req, res) {
   if (!userId) return res.status(400).json({ error: 'userId required' });
   if (!query) return res.status(400).json({ error: 'query required' });
 
+  const resolvedTenant = resolveHandlerTenant(req, userId);
+  if (!resolvedTenant.ok) {
+    return res.status(400).json({ error: 'tenant identity required (session token or tenant user_id)' });
+  }
+
   try {
-    const facts = await retrieveMemories(userId, { limit: 5, query });
+    const facts = await retrieveMemories(userId, { limit: 5, query, tenantId: resolvedTenant.tenantId });
     if (!facts.length) {
       return res.status(200).json({ found: false, summary: "I don't have anything saved about that." });
     }

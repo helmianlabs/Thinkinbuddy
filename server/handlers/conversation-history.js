@@ -22,16 +22,23 @@
 // Gated with requireWebhookSecret: server-to-server only, closed by default
 // (lib/security.js:78-84 returns 503 when WEBHOOK_SECRET is unset).
 //
-// It is NOT scoped "a caller may only read their own sessions", because this
-// app has no concept of a caller. genUserId() (index.html:1003-1008) returns
-// the hardcoded string 'troy' for every user on every device — it is not a
-// random per-user id, and conversation-webhook.js:135 hardcodes 'troy' too.
-// There is no session, no token and no login anywhere in the app. So `userId`
-// is a guessable constant, not a credential: keying access on it would make
-// full conversation transcripts world-readable to anyone who can type the
-// word "troy", which is precisely the defect api/memory-admin.js:31-38 admits
-// to. Transcripts are far more sensitive than the short facts that endpoint
-// exposes, so this route does not repeat that pattern.
+// UPDATE (store wiring bite — lib/tenant.js): the app now HAS a caller
+// identity in hosted mode. When SESSION_SECRET is set (enforced mode),
+// the export below is scoped to ONE tenant_id in addition to the
+// webhook-secret gate: the tenant is resolved from the caller's session
+// token, or — for this server-to-server route — from the userId value
+// itself, which in hosted mode IS the tenant id (the widget's `user_id`
+// dynamic variable carries it; see prime-agent.js). An enforced-mode
+// request whose tenant cannot be resolved is rejected; the secret alone
+// no longer unlocks everyone's transcripts. When SESSION_SECRET is NOT
+// set (compat mode — today's live deployment), the original behavior
+// stands, and it is still NOT scoped "a caller may only read their own
+// sessions": genUserId() (index.html:1003-1008) returns the hardcoded
+// string 'troy' for every user on every device, so `userId` is a
+// guessable constant, not a credential, and this route stays
+// server-to-server only behind the webhook secret. Transcripts are far
+// more sensitive than the short facts memory-admin exposes, so this
+// route does not repeat that pattern in either mode.
 //
 // CONSEQUENCE FOR THE EXPORT BUTTON: a browser cannot call this route without
 // shipping WEBHOOK_SECRET into the client bundle, which would stop it being a
@@ -52,6 +59,7 @@
 
 import { getPool } from './memory.js';
 import { requireWebhookSecret } from '../../lib/security.js';
+import { resolveHandlerTenant } from '../../lib/tenant.js';
 
 const MAX_LIMIT = 100;
 
@@ -85,6 +93,15 @@ export default async function handler(req, res) {
   const userId = req.query?.userId;
   if (!userId) return res.status(400).json({ error: 'userId required' });
 
+  // Tenant scoping (enforced mode only — see the AUTH note at the top):
+  // tenantId non-null scopes BOTH selects below; null (compat) leaves
+  // the original user_id-only queries untouched.
+  const resolvedTenant = resolveHandlerTenant(req, userId);
+  if (!resolvedTenant.ok) {
+    return res.status(400).json({ error: 'tenant identity required (session token or tenant user_id)' });
+  }
+  const tenantId = resolvedTenant.tenantId;
+
   // conversation_sessions.id is UUID (setup-conversation-log-db.mjs:54). A
   // non-UUID value reaches Postgres and throws 22P02, which this file's catch
   // would surface as a 500 — the wrong signal for what is a caller mistake.
@@ -105,17 +122,19 @@ export default async function handler(req, res) {
 
     // 1. Sessions for this user, newest first. Asking for limit+1 is how
     //    hasMore is derived without a second COUNT over the same predicate.
+    const sessionParams = [userId, limit + 1, offset];
+    let tenantParamSql = '';
+    if (tenantId) { sessionParams.push(tenantId); tenantParamSql = `AND tenant_id = $${sessionParams.length}`; }
+    if (sessionId) sessionParams.push(sessionId);
     const sessionSql = `
       SELECT id, user_id, conversation_id, agent_id, started_at, ended_at,
              end_reason, turn_count, reconciled, source, summary
         FROM conversation_sessions
        WHERE user_id = $1
-         ${sessionId ? 'AND id = $4' : ''}
+         ${tenantParamSql}
+         ${sessionId ? `AND id = $${sessionParams.length}` : ''}
        ORDER BY started_at DESC
        LIMIT $2 OFFSET $3`;
-    const sessionParams = sessionId
-      ? [userId, limit + 1, offset, sessionId]
-      : [userId, limit + 1, offset];
     const { rows: sessionRows } = await pool.query(sessionSql, sessionParams);
 
     const hasMore = sessionRows.length > limit;
@@ -136,13 +155,18 @@ export default async function handler(req, res) {
     //    safe here: a webhook backfill writes later than the live row it
     //    replaces, so sorting by time would scramble a reconciled transcript.
     const ids = sessions.map((s) => s.id);
+    // Turns are scoped twice over in enforced mode: by the (already
+    // tenant-filtered) session ids AND by the turns' own tenant_id
+    // column (sql/store/002 backfills it from the session), so a turn
+    // written before the session was stamped still cannot leak across.
     const { rows: turnRows } = await pool.query(
       `SELECT session_id, turn_index, role, content, source, created_at
               ${includeRaw ? ', raw' : ''}
          FROM conversation_turns
         WHERE session_id = ANY($1::uuid[])
+          ${tenantId ? 'AND tenant_id = $2' : ''}
         ORDER BY session_id, turn_index ASC`,
-      [ids]
+      tenantId ? [ids, tenantId] : [ids]
     );
 
     const bySession = new Map(ids.map((id) => [id, []]));

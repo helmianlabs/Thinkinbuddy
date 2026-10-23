@@ -28,6 +28,29 @@
 
 import crypto from 'node:crypto';
 import { getPool } from '../server/handlers/memory.js';
+import { tenantEnforced, isTenantId } from '../lib/tenant.js';
+
+// ─── TENANT MAPPING (store wiring bite) ────────────────────────────────────
+// This webhook has no user session — it is ElevenLabs calling
+// server-to-server, gated by the HMAC signature check below (unchanged).
+// The tenant comes from the SESSION METADATA of the ElevenLabs
+// conversation: at session start the client sets the widget's `user_id`
+// dynamic variable to the tenant id returned by prime-agent.js, and
+// ElevenLabs echoes it back in the post-call payload's conversation
+// initiation client data (data.conversation_initiation_client_data —
+// its dynamic_variables.user_id, or its user_id field). sessionTenantId()
+// below reads exactly those places; the mapping is:
+//     session metadata user_id  ==  tenants.id  ==  conversation_sessions.tenant_id
+// When a live session row already exists for the conversation_id, ITS
+// tenant_id wins over the payload (the row was stamped by
+// conversation-turn.js when the call happened).
+//
+// ENFORCED mode (SESSION_SECRET set): a webhook whose session maps to
+// no tenant is REFUSED — logged, acknowledged with 200 (so ElevenLabs
+// does not retry-storm), and NOTHING is written. Never a default tenant.
+// COMPAT mode (no SESSION_SECRET — today's live deployment): behavior
+// is byte-for-byte the pre-wiring one, including the 'troy' user_id on
+// webhook-created sessions; no query references tenant_id.
 
 export const config = { api: { bodyParser: false } };
 
@@ -57,6 +80,23 @@ function verifySignature(rawBody, header, secret) {
   } catch {
     return false;
   }
+}
+
+// Extract the session-metadata user_id from a post-call payload. The
+// payload shape has not been verified against a live sample (see the
+// header note about the signature), so look in each documented place
+// and return the first non-empty string, or null.
+function sessionTenantId(data) {
+  const cicd = data?.conversation_initiation_client_data;
+  const candidates = [
+    cicd?.dynamic_variables?.user_id,
+    cicd?.user_id,
+    data?.user_id,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim()) return c.trim();
+  }
+  return null;
 }
 
 function extractTurns(transcript) {
@@ -114,38 +154,89 @@ export default async function handler(req, res) {
     }
 
     const pool = getPool();
+    const enforced = tenantEnforced();
 
     // Find (or create) the session for this conversation_id. If a live
     // session already exists (conversation-turn.js set it), reconcile into
     // it. Otherwise this webhook is the FIRST time we've heard about this
     // call at all (client-side capture failed entirely) -- create a new
     // session keyed by conversation_id itself.
+    //
+    // In enforced mode the session row's tenant_id is read too (compat
+    // mode keeps the original id-only SELECT — the live DB may not have
+    // the tenant_id column yet).
     const existing = await pool.query(
-      `SELECT id FROM conversation_sessions WHERE conversation_id = $1`,
+      enforced
+        ? `SELECT id, tenant_id FROM conversation_sessions WHERE conversation_id = $1`
+        : `SELECT id FROM conversation_sessions WHERE conversation_id = $1`,
       [conversationId]
     );
     let sessionId = existing.rows[0]?.id;
+    // The tenant this reconcile writes under. Existing session's stamp
+    // wins; otherwise the session-metadata mapping decides (enforced).
+    let tenantId = enforced ? (existing.rows[0]?.tenant_id || null) : null;
     if (!sessionId) {
       sessionId = conversationId; // deterministic fallback id, still a valid UUID-shaped text key check below
       const isUuidLike = /^[0-9a-f-]{20,}$/i.test(conversationId);
       const insertId = isUuidLike ? conversationId : crypto.randomUUID();
-      await pool.query(
-        `INSERT INTO conversation_sessions (id, user_id, conversation_id, agent_id, source)
-         VALUES ($1, $2, $3, $4, 'post_call_webhook_only')
-         ON CONFLICT (id) DO NOTHING`,
-        [insertId, 'troy', conversationId, agentId || null]
-      );
+      if (enforced) {
+        const metaUserId = sessionTenantId(data);
+        if (!isTenantId(metaUserId)) {
+          console.error('[conversation-webhook] refusing reconcile: no tenant mapping for conversation', conversationId,
+            '(session metadata user_id missing or not a tenant id)');
+          return res.status(200).json({ ok: true, reconciled: false, reason: 'no tenant mapping' });
+        }
+        tenantId = metaUserId;
+        await pool.query(
+          `INSERT INTO conversation_sessions (id, user_id, conversation_id, agent_id, source, tenant_id)
+           VALUES ($1, $2, $3, $4, 'post_call_webhook_only', $5)
+           ON CONFLICT (id) DO NOTHING`,
+          [insertId, metaUserId, conversationId, agentId || null, tenantId]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO conversation_sessions (id, user_id, conversation_id, agent_id, source)
+           VALUES ($1, $2, $3, $4, 'post_call_webhook_only')
+           ON CONFLICT (id) DO NOTHING`,
+          [insertId, 'troy', conversationId, agentId || null]
+        );
+      }
       sessionId = insertId;
+    } else if (enforced && !tenantId) {
+      // A pre-wiring session row (tenant_id NULL) whose conversation maps
+      // to a tenant in the metadata: stamp it now so the turns below and
+      // every future read are scoped. No metadata mapping -> refuse.
+      const metaUserId = sessionTenantId(data);
+      if (!isTenantId(metaUserId)) {
+        console.error('[conversation-webhook] refusing reconcile: session', sessionId,
+          'has no tenant and the payload maps to none');
+        return res.status(200).json({ ok: true, reconciled: false, reason: 'no tenant mapping' });
+      }
+      tenantId = metaUserId;
+      await pool.query(
+        `UPDATE conversation_sessions SET tenant_id = $2 WHERE id = $1 AND tenant_id IS NULL`,
+        [sessionId, tenantId]
+      );
     }
 
     for (const t of turns) {
-      await pool.query(
-        `INSERT INTO conversation_turns (session_id, turn_index, role, content, raw, source)
-         VALUES ($1, $2, $3, $4, $5::jsonb, 'post_call_webhook')
-         ON CONFLICT (session_id, turn_index) DO UPDATE
-           SET content = EXCLUDED.content, raw = EXCLUDED.raw, source = 'post_call_webhook'`,
-        [sessionId, t.turnIndex, t.role, t.content?.slice(0, 10000) || null, JSON.stringify(t.raw).slice(0, 20000)]
-      );
+      if (tenantId) {
+        await pool.query(
+          `INSERT INTO conversation_turns (session_id, turn_index, role, content, raw, source, tenant_id)
+           VALUES ($1, $2, $3, $4, $5::jsonb, 'post_call_webhook', $6)
+           ON CONFLICT (session_id, turn_index) DO UPDATE
+             SET content = EXCLUDED.content, raw = EXCLUDED.raw, source = 'post_call_webhook'`,
+          [sessionId, t.turnIndex, t.role, t.content?.slice(0, 10000) || null, JSON.stringify(t.raw).slice(0, 20000), tenantId]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO conversation_turns (session_id, turn_index, role, content, raw, source)
+           VALUES ($1, $2, $3, $4, $5::jsonb, 'post_call_webhook')
+           ON CONFLICT (session_id, turn_index) DO UPDATE
+             SET content = EXCLUDED.content, raw = EXCLUDED.raw, source = 'post_call_webhook'`,
+          [sessionId, t.turnIndex, t.role, t.content?.slice(0, 10000) || null, JSON.stringify(t.raw).slice(0, 20000)]
+        );
+      }
     }
 
     await pool.query(
