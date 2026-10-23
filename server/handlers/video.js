@@ -7,8 +7,8 @@
 //   1. prompt → start frame via OpenAI images (same pipeline as image.js)
 //   2. start frame + prompt → Runway gen4_turbo image-to-video
 //   3. rehost the mp4 to Blob + sidecar meta + save to media memory
-// Sora remains available at /api/video-sora; the old pure-text attempt is
-// preserved at api/video-runway-veo.js.
+// (OpenAI Sora was removed in Oct 2026 — the Videos API was retired;
+// pure-text video now goes through the Veo paths.)
 //
 // Body: { prompt, userId?, aspect? = 'landscape'|'portrait'|'square', seconds? = 10, promptImage? }
 // If promptImage is supplied we skip step 1 and animate that image directly.
@@ -228,6 +228,7 @@ export default async function handler(req, res) {
       type: 'video',
       blobUrl: blob.url,
       prompt,
+      tenantId: resolvedTenant.tenantId,
     }).catch((e) => console.error('[video] media memory save failed:', e?.message || e));
 
     await recordMetered(vidGate, getUsageDb, {
