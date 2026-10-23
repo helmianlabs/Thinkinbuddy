@@ -759,6 +759,36 @@
   <script src="https://elevenlabs.io/convai-widget/index.js" async type="text/javascript"></script>
 
   <script>
+    // ── Store session identity (hosted mode) ─────────────────────────
+    // public/onboarding.js stores the account session in localStorage
+    // under tb_token / tb_tenant at signup/login. The legacy surfaces in
+    // this file (the prime call, apiFetch, the in-call capture below)
+    // predate accounts and sent NO Authorization header — in hosted
+    // mode (SESSION_SECRET set server-side) prime-agent's requireTenant
+    // 401'd, so the widget silently ran the agent's DEFAULT prompt and
+    // none of the user's memories ever loaded. These helpers attach the
+    // session wherever one exists. Signed out / legacy deployment: no
+    // token in storage, every helper degrades to the pre-accounts
+    // behavior, byte for byte.
+    function tbSessionToken() {
+      try { return localStorage.getItem('tb_token') || null; } catch { return null; }
+    }
+    function tbSessionTenantId() {
+      try { return localStorage.getItem('tb_tenant') || null; } catch { return null; }
+    }
+    function tbAuthHeaders() {
+      const t = tbSessionToken();
+      return t ? { Authorization: `Bearer ${t}` } : {};
+    }
+    // The identity the in-call surfaces carry (the widget's user_id
+    // dynamic variable, conversation-turn, extract-memories): the
+    // tenant id when logged in — prime-agent's contract is that hosted
+    // tool/capture calls resolve the tenant from it — else the legacy
+    // localStorage user id, unchanged.
+    function tbCallUserId() {
+      return tbSessionTenantId() || currentUser?.userId || localStorage.getItem('thinkinbuddy_user_id') || null;
+    }
+
     // Poll for newly generated images every 3 seconds while widget is active
     let lastImageTimestamp = 0;
     let imagePoller = null;
@@ -850,10 +880,10 @@
       try {
         fetch('/api/conversation-turn', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...tbAuthHeaders() },
           body: JSON.stringify({
             sessionId: liveSessionId,
-            userId: currentUser.userId,
+            userId: tbCallUserId() || currentUser.userId,
             conversationId: lastConversationId,
             turnIndex: liveTurnIndex++,
             role, content, raw,
@@ -882,8 +912,8 @@
       try {
         fetch('/api/extract-memories', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: currentUser.userId, conversationId: lastConversationId }),
+          headers: { 'Content-Type': 'application/json', ...tbAuthHeaders() },
+          body: JSON.stringify({ userId: tbCallUserId() || currentUser.userId, conversationId: lastConversationId }),
           keepalive: true,
         });
         console.log('[MEM-HB] extract-memories POSTed:', reason, lastConversationId);
@@ -938,7 +968,7 @@
       // Agent tools declare {{user_id}}; ElevenLabs closes the call (1008
       // "Missing required dynamic variables") if it is absent, so always send one.
       {
-        let uid = currentUser?.userId || localStorage.getItem('thinkinbuddy_user_id');
+        let uid = tbCallUserId();
         if (!uid) { uid = 'guest-' + crypto.randomUUID(); localStorage.setItem('thinkinbuddy_user_id', uid); }
         cfg.dynamicVariables = { ...(cfg.dynamicVariables || {}), user_id: uid };
         console.log('[MEM-HB] set dynamicVariables.user_id for in-call tools');
@@ -1735,12 +1765,10 @@
       'memory':            TEXT_BRAIN_KEYS,
       'image':             ['OPENAI_API_KEY'],
       'image-flux':        ['REPLICATE_API_TOKEN', 'OPENAI_API_KEY'],
-      'image-imagen':      ['GOOGLE_API_KEY', 'OPENAI_API_KEY'],
       'video':             ['RUNWAY_API_KEY', 'OPENAI_API_KEY'],
       'video-runway':      ['RUNWAY_API_KEY', 'OPENAI_API_KEY'],
       'video-runway-veo':  ['RUNWAY_API_KEY'],
       'video-heygen':      ['HEYGEN_API_KEY'],
-      'video-sora':        ['OPENAI_API_KEY'],
       'latest-video':      ['OPENAI_API_KEY'],
     };
 
@@ -1759,6 +1787,11 @@
         const model = loadBrainModel();
         if (model) headers['X-User-Model'] = model;
       }
+      // Hosted mode: ride the account session (tbSessionToken, first
+      // script block) so tenant-gated /api routes resolve THIS user.
+      // No token stored -> no header, exactly the pre-accounts behavior.
+      const sessionToken = tbSessionToken();
+      if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
       return fetch(url, { ...opts, headers });
     }
     window.thinkinBuddyApiFetch = apiFetch;
@@ -2045,7 +2078,7 @@
       try {
         const primeRes = await fetch('/api/prime-agent', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...tbAuthHeaders() },
           body: JSON.stringify({
             buddyName,
             userName: user.name,

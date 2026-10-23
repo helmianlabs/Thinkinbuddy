@@ -113,6 +113,17 @@ export async function retrieveMemories(userId, optsOrLimit = 30) {
   // what compat mode (today's live deployment) requires.
   const tenantId = typeof opts.tenantId === 'string' && opts.tenantId ? opts.tenantId : null;
 
+  // TENANT-ERA IDENTITY (buddy-repair fix): in enforced mode memory
+  // belongs to the TENANT — tenant_id is the isolation boundary and the
+  // ONLY identity filter. A tenant's rows may carry any legacy user_id
+  // sub-identity (rows claimed from the single-user era are stamped
+  // user_id 'troy' under the owner's tenant); ALSO filtering on
+  // user_id = <tenantId> starved exactly those rows and the buddy woke
+  // up with amnesia. In compat mode (tenantId null) the identity is
+  // user_id, and the queries below are the originals unchanged.
+  const identityCol = tenantId ? 'tenant_id' : 'user_id';
+  const identityId = tenantId || userId;
+
   const pool = getPool();
 
   // VECTOR-FIRST path: embed the query and rank by cosine distance.
@@ -122,9 +133,7 @@ export async function retrieveMemories(userId, optsOrLimit = 30) {
     catch (e) { console.error('[memory] retrieve embed failed (falling back to boot rank):', e?.message || e); }
 
     if (vec) {
-      const params = [userId, scopes];
-      let tenantClause = '';
-      if (tenantId) { params.push(tenantId); tenantClause = `AND tenant_id = $${params.length}`; }
+      const params = [identityId, scopes];
       params.push(vecLiteral(vec)); const vecParam = params.length;
       params.push(limit); const limitParam = params.length;
       const { rows } = await pool.query(
@@ -133,9 +142,8 @@ export async function retrieveMemories(userId, optsOrLimit = 30) {
                 importance,
                 updated_at
            FROM memory_items
-          WHERE user_id = $1
+          WHERE ${identityCol} = $1
             AND scope = ANY($2::text[])
-            ${tenantClause}
             AND (valid_until IS NULL OR valid_until > now())
             -- liveness gated by valid_until; supersedes is an audit back-pointer, not a hide flag
           ORDER BY embedding <=> $${vecParam}::vector,
@@ -156,9 +164,7 @@ export async function retrieveMemories(userId, optsOrLimit = 30) {
   }
 
   // BOOT path (no query, or embed failed): importance/confidence/recency.
-  const bootParams = [userId, scopes];
-  let bootTenantClause = '';
-  if (tenantId) { bootParams.push(tenantId); bootTenantClause = `AND tenant_id = $${bootParams.length}`; }
+  const bootParams = [identityId, scopes];
   bootParams.push(limit); const bootLimitParam = bootParams.length;
   const { rows } = await pool.query(
     `SELECT subject AS key,
@@ -166,9 +172,8 @@ export async function retrieveMemories(userId, optsOrLimit = 30) {
             importance,
             updated_at
        FROM memory_items
-      WHERE user_id = $1
+      WHERE ${identityCol} = $1
         AND scope = ANY($2::text[])
-        ${bootTenantClause}
         AND (valid_until IS NULL OR valid_until > now())
       ORDER BY importance DESC NULLS LAST,
                confidence DESC NULLS LAST,
@@ -206,14 +211,15 @@ async function upsertFactInternal(userId, key, value, opts = {}) {
   const sourceSession = opts.sourceSession || null;
   const tenantId = opts.tenantId || null;
 
-  const existingParams = [userId, subject];
-  let existingTenantClause = '';
-  if (tenantId) { existingParams.push(tenantId); existingTenantClause = `AND tenant_id = $${existingParams.length}`; }
+  // Dedup identity follows retrieval's rule (see retrieveMemories):
+  // enforced mode keys the existing-row lookup on tenant_id alone, so a
+  // fact re-saved under the tenant identity updates the legacy-stamped
+  // row instead of duplicating it; compat keys on user_id as before.
+  const existingParams = [tenantId || userId, subject];
   const existing = await pool.query(
     `SELECT id FROM memory_items
-      WHERE user_id = $1 AND scope = 'semantic' AND kind = 'fact'
+      WHERE ${tenantId ? 'tenant_id' : 'user_id'} = $1 AND scope = 'semantic' AND kind = 'fact'
         AND subject = $2 AND supersedes IS NULL
-        ${existingTenantClause}
       LIMIT 1`,
     existingParams
   );
@@ -427,18 +433,18 @@ export async function saveMemoryCandidates(pool, user_id, candidates, llm, tenan
 
     const vlit = vecLiteral(vec);
 
-    // Nearest neighbors within the SAME scope (spec :371-382).
-    const nbParams = [vlit, user_id, c.scope];
-    let nbTenantClause = '';
-    if (tenantId) { nbParams.push(tenantId); nbTenantClause = `AND tenant_id = $${nbParams.length}`; }
+    // Nearest neighbors within the SAME scope (spec :371-382). The
+    // identity predicate follows retrieval's rule: tenant_id alone in
+    // enforced mode (legacy-stamped rows stay dedup-visible), user_id
+    // in compat mode.
+    const nbParams = [vlit, tenantId || user_id, c.scope];
     nbParams.push(NEIGHBOR_K); const nbLimitParam = nbParams.length;
     const neighbors = await pool.query(
       `SELECT id, kind, subject, content, confidence, importance,
               (embedding <=> $1::vector) AS distance
          FROM memory_items
-        WHERE user_id = $2
+        WHERE ${tenantId ? 'tenant_id' : 'user_id'} = $2
           AND scope = $3
-          ${nbTenantClause}
           AND embedding IS NOT NULL
           AND (valid_until IS NULL OR valid_until > now())
         ORDER BY embedding <=> $1::vector
@@ -537,14 +543,13 @@ export async function saveMemoryCandidates(pool, user_id, candidates, llm, tenan
 
 async function readFacts(userId, tenantId = null) {
   const pool = getPool();
-  const rfParams = [userId];
-  let rfTenantClause = '';
-  if (tenantId) { rfParams.push(tenantId); rfTenantClause = `AND tenant_id = $${rfParams.length}`; }
+  // Same tenant-era identity rule as retrieveMemories: tenant_id alone
+  // in enforced mode, user_id in compat mode.
+  const rfParams = [tenantId || userId];
   const sql = `
     SELECT id, subject AS key, content AS value, updated_at, created_at, importance, confidence
       FROM memory_items
-     WHERE user_id = $1
-       ${rfTenantClause}
+     WHERE ${tenantId ? 'tenant_id' : 'user_id'} = $1
        AND scope = 'semantic'
        AND (valid_until IS NULL OR valid_until > now())
      ORDER BY importance DESC, confidence DESC, updated_at DESC
@@ -564,14 +569,15 @@ async function upsertFact(userId, key, value, tenantId = null) {
 
   // Try UPDATE-by-subject first (idempotent on legacy {key,value} writes).
   // Embedding refresh is fire-and-forget on UPDATE to keep the path fast.
-  const existingParams = [userId, subject];
-  let existingTenantClause = '';
-  if (tenantId) { existingParams.push(tenantId); existingTenantClause = `AND tenant_id = $${existingParams.length}`; }
+  // Dedup identity follows retrieval's rule (see retrieveMemories):
+  // enforced mode keys the existing-row lookup on tenant_id alone, so a
+  // fact re-saved under the tenant identity updates the legacy-stamped
+  // row instead of duplicating it; compat keys on user_id as before.
+  const existingParams = [tenantId || userId, subject];
   const existing = await pool.query(
     `SELECT id FROM memory_items
-      WHERE user_id = $1 AND scope = 'semantic' AND kind = 'fact'
+      WHERE ${tenantId ? 'tenant_id' : 'user_id'} = $1 AND scope = 'semantic' AND kind = 'fact'
         AND subject = $2 AND supersedes IS NULL
-        ${existingTenantClause}
       LIMIT 1`,
     existingParams
   );
@@ -615,8 +621,8 @@ async function deleteFact(userId, key, tenantId = null) {
   const subject = String(key).slice(0, 120);
   const r = await pool.query(
     `DELETE FROM memory_items
-      WHERE user_id = $1 AND scope = 'semantic' AND subject = $2${tenantId ? ' AND tenant_id = $3' : ''}`,
-    tenantId ? [userId, subject, tenantId] : [userId, subject]
+      WHERE ${tenantId ? 'tenant_id' : 'user_id'} = $1 AND scope = 'semantic' AND subject = $2`,
+    [tenantId || userId, subject]
   );
   return { deleted: r.rowCount };
 }
@@ -663,7 +669,10 @@ export default async function handler(req, res) {
       const userId = req.body?.userId || req.query?.userId;
       if (!userId) return res.status(400).json({ error: 'userId required' });
       if (!key || !value) return res.status(400).json({ error: 'key and value required' });
-      const out = await upsertFact(userId, key, value, tenantId);
+      // Enforced mode stamps new rows with the tenant identity — the
+      // identity retrieval looks for (see retrieveMemories). Compat
+      // mode stamps the caller's userId, exactly as before.
+      const out = await upsertFact(tenantId || userId, key, value, tenantId);
       return res.status(200).json({
         ok: true,
         fact: { key: out.subject, value: out.content, savedAt: new Date().toISOString() },
@@ -675,7 +684,7 @@ export default async function handler(req, res) {
       const { userId, key } = req.query;
       if (!userId) return res.status(400).json({ error: 'userId required' });
       if (!key) return res.status(400).json({ error: 'key required' });
-      await deleteFact(userId, key, tenantId);
+      await deleteFact(tenantId || userId, key, tenantId);
       return res.status(200).json({ ok: true });
     }
 

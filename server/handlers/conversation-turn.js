@@ -46,6 +46,15 @@ export default async function handler(req, res) {
   }
   const tenantId = resolvedTenant.tenantId;
 
+  // Tenant-era write identity: in enforced mode the session row is
+  // stamped with the TENANT id as its user_id — the identity retrieval
+  // (conversation-history, memory) resolves for this tenant — even when
+  // the client still passes its legacy localStorage id ('troy'). The
+  // token (or tenant user_id) named the tenant; the body's legacy id
+  // must not become the row's identity. Compat mode: userId as passed,
+  // unchanged.
+  const effectiveUserId = tenantId || userId;
+
   try {
     const pool = getPool();
 
@@ -56,7 +65,7 @@ export default async function handler(req, res) {
          ON CONFLICT (id) DO UPDATE
            SET conversation_id = COALESCE(conversation_sessions.conversation_id, EXCLUDED.conversation_id),
                tenant_id = COALESCE(conversation_sessions.tenant_id, EXCLUDED.tenant_id)`,
-        [sessionId, userId, conversationId || null, agentId || null, tenantId]
+        [sessionId, effectiveUserId, conversationId || null, agentId || null, tenantId]
       );
     } else {
       await pool.query(

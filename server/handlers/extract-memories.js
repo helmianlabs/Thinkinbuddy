@@ -252,6 +252,12 @@ export default async function handler(req, res) {
   }
   const tenantId = resolvedTenant.tenantId;
 
+  // Tenant-era write identity: extracted facts are saved under the
+  // TENANT id in enforced mode (the identity retrieval looks for —
+  // see memory.js retrieveMemories), even when the client still passes
+  // its legacy localStorage id. Compat mode: userId as passed.
+  const effectiveUserId = tenantId || userId;
+
   const elevenKey = process.env.ELEVENLABS_API_KEY;
   if (!elevenKey)    return res.status(500).json({ error: 'ELEVENLABS_API_KEY not set' });
   if (!hasTextLlm(req)) return res.status(500).json({ error: 'No LLM key. Use Free Gemini, or add a key under Settings → Your AI.' });
@@ -278,7 +284,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, extracted: 0, reason: 'no durable facts' });
     }
 
-    const result = await persistCandidates(userId, candidates, conversationId, req, tenantId);
+    const result = await persistCandidates(effectiveUserId, candidates, conversationId, req, tenantId);
 
     return res.status(200).json({
       ok: true,
