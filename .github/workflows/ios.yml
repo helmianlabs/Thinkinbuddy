@@ -1,0 +1,208 @@
+# ThinkinBuddy iOS builds on GitHub Actions.
+#
+# This repository is PUBLIC, so macOS runner minutes are free — this is
+# the no-Mac route to an iOS build (see
+# docs/store/STATUS.md and the no-Mac research note in the goal files).
+#
+# Job 1 `ios-simulator-build` (automatic): unsigned simulator build on
+# every push to the store branch that touches iOS inputs, and on manual
+# dispatch. Proves the iOS project compiles; uploads the .app as an
+# artifact. No secrets, no signing, $0.
+#
+# Job 2 `ios-archive` (manual dispatch ONLY): signed archive + export,
+# the TestFlight path. It runs only when someone dispatches this
+# workflow by hand, and it SKIPS CLEANLY (green, with a summary note)
+# when the signing secrets below are not configured — it never fails
+# red just because signing is not set up yet.
+#
+# Signing secrets job 2 needs (repo Settings -> Secrets -> Actions):
+#   BUILD_CERTIFICATE_BASE64        Apple Distribution cert (.p12), base64
+#   BUILD_CERTIFICATE_PASSWORD      password for that .p12
+#   PROVISIONING_PROFILE_BASE64     App Store provisioning profile, base64
+#   APP_STORE_CONNECT_API_KEY_ID    App Store Connect API key ID
+#   APP_STORE_CONNECT_API_ISSUER_ID App Store Connect issuer ID
+#   APP_STORE_CONNECT_API_KEY_BASE64  the .p8 API key file, base64
+# (Upload to TestFlight itself is a separate deliberate step once the
+# archive job is proven; this job stops at a signed .ipa artifact.)
+
+name: iOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - store/bite1-tenants
+    paths:
+      - '.github/workflows/ios.yml'
+      - 'ios/**'
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+
+jobs:
+  ios-simulator-build:
+    name: iOS simulator build (unsigned)
+    runs-on: macos-14
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the web bundle
+        run: npm run build
+
+      - name: Sync web assets into the iOS project
+        run: npx cap sync ios
+
+      - name: Build for the iOS simulator (no signing)
+        run: |
+          xcodebuild build \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload the simulator .app
+        uses: actions/upload-artifact@v4
+        with:
+          name: thinkinbuddy-simulator-app
+          path: build/DerivedData/Build/Products/Debug-iphonesimulator/App.app
+          if-no-files-found: error
+
+  ios-archive:
+    name: iOS archive (signed, manual only)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-14
+    steps:
+      - name: Check whether signing secrets are configured
+        id: signing
+        env:
+          CERT: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          CERT_PW: ${{ secrets.BUILD_CERTIFICATE_PASSWORD }}
+          PROFILE: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+          ASC_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ASC_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          ASC_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+        run: |
+          missing=0
+          for v in CERT CERT_PW PROFILE ASC_ID ASC_ISSUER ASC_KEY; do
+            if [ -z "${!v}" ]; then
+              echo "secret for $v is not set"
+              missing=1
+            fi
+          done
+          if [ "$missing" -eq 1 ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### iOS archive skipped"
+              echo "Signing secrets are not configured yet, so the archive job skipped cleanly."
+              echo "Add the secrets listed in the header of .github/workflows/ios.yml, then dispatch this workflow again."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Note the skip and stop
+        if: steps.signing.outputs.ready != 'true'
+        run: echo "Signing secrets absent — skipping archive (this is a clean skip, not a failure)."
+
+      - name: Check out the repo
+        if: steps.signing.outputs.ready == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        if: steps.signing.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.signing.outputs.ready == 'true'
+        run: npm ci
+
+      - name: Build the web bundle
+        if: steps.signing.outputs.ready == 'true'
+        run: npm run build
+
+      - name: Sync web assets into the iOS project
+        if: steps.signing.outputs.ready == 'true'
+        run: npx cap sync ios
+
+      - name: Import the signing certificate and provisioning profile
+        if: steps.signing.outputs.ready == 'true'
+        env:
+          CERT: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          CERT_PW: ${{ secrets.BUILD_CERTIFICATE_PASSWORD }}
+          PROFILE: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PW="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          echo "$CERT" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PW" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PW" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo "$PROFILE" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/thinkinbuddy.mobileprovision"
+
+      - name: Archive the app
+        if: steps.signing.outputs.ready == 'true'
+        run: |
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/ThinkinBuddy.xcarchive"
+
+      - name: Export the .ipa
+        if: steps.signing.outputs.ready == 'true'
+        env:
+          ASC_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ASC_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          ASC_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+        run: |
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          echo "$ASC_KEY" | base64 --decode > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_ID}.p8"
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/ThinkinBuddy.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -authenticationKeyID "$ASC_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER" \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_ID}.p8"
+
+      - name: Upload the signed .ipa
+        if: steps.signing.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: thinkinbuddy-signed-ipa
+          path: ${{ runner.temp }}/export/*.ipa
+          if-no-files-found: error
