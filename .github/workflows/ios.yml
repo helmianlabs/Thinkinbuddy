@@ -62,10 +62,15 @@ jobs:
       - name: Sync web assets into the iOS project
         run: npx cap sync ios
 
+      - name: Install the iOS libraries (CocoaPods)
+        run: |
+          cd ios/App
+          pod install
+
       - name: Build for the iOS simulator (no signing)
         run: |
           xcodebuild build \
-            -project ios/App/App.xcodeproj \
+            -workspace ios/App/App.xcworkspace \
             -scheme App \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/DerivedData \
@@ -138,6 +143,12 @@ jobs:
         if: steps.signing.outputs.ready == 'true'
         run: npx cap sync ios
 
+      - name: Install the iOS libraries (CocoaPods)
+        if: steps.signing.outputs.ready == 'true'
+        run: |
+          cd ios/App
+          pod install
+
       - name: Import the signing certificate and provisioning profile
         if: steps.signing.outputs.ready == 'true'
         env:
@@ -161,7 +172,7 @@ jobs:
         if: steps.signing.outputs.ready == 'true'
         run: |
           xcodebuild archive \
-            -project ios/App/App.xcodeproj \
+            -workspace ios/App/App.xcworkspace \
             -scheme App \
             -configuration Release \
             -archivePath "$RUNNER_TEMP/ThinkinBuddy.xcarchive"
