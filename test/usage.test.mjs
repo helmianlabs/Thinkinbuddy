@@ -116,27 +116,29 @@ describe('costFor', () => {
     assert.equal(costFor('chat'), 1);
   });
 
-  it('speak is per 100 chars, minimum 1', () => {
-    assert.equal(costFor('speak', { chars: 0 }), 1);
-    assert.equal(costFor('speak', { chars: 1 }), 1);
-    assert.equal(costFor('speak', { chars: 100 }), 1);
-    assert.equal(costFor('speak', { chars: 101 }), 2);
-    assert.equal(costFor('speak', { chars: 250 }), 3);
-    assert.equal(costFor('speak', { text: 'x'.repeat(200) }), 2);
+  it('speak is 20 credits per 100 chars, minimum 1', () => {
+    assert.equal(CREDIT_COSTS.speak_per_100_chars, 20);
+    assert.equal(costFor('speak', { chars: 0 }), 1); // minimum charge
+    assert.equal(costFor('speak', { chars: 1 }), 20);
+    assert.equal(costFor('speak', { chars: 100 }), 20);
+    assert.equal(costFor('speak', { chars: 101 }), 40);
+    assert.equal(costFor('speak', { chars: 250 }), 60);
+    assert.equal(costFor('speak', { text: 'x'.repeat(200) }), 40);
   });
 
   it('image is the flat image rate', () => {
     assert.equal(costFor('image'), 5);
   });
 
-  it('video is per second with the 30-credit floor', () => {
+  it('video is 60 credits per second with the 30-credit floor', () => {
+    assert.equal(CREDIT_COSTS.video_per_second, 60);
     assert.equal(costFor('video', { seconds: 0 }), 30); // floor
-    assert.equal(costFor('video', { seconds: 2 }), 30); // floor beats 20
-    assert.equal(costFor('video', { seconds: 3 }), 30); // 3*10 = floor
-    assert.equal(costFor('video', { seconds: 5 }), 50);
-    assert.equal(costFor('video', { seconds: 10 }), 100);
-    assert.equal(costFor('video', { duration: 8 }), 80); // duration alias
-    assert.equal(costFor('video', { seconds: 5.2 }), 60); // partial second rounds up
+    assert.equal(costFor('video', { seconds: 2 }), 120); // per-second beats floor
+    assert.equal(costFor('video', { seconds: 3 }), 180);
+    assert.equal(costFor('video', { seconds: 5 }), 300);
+    assert.equal(costFor('video', { seconds: 10 }), 600);
+    assert.equal(costFor('video', { duration: 8 }), 480); // duration alias
+    assert.equal(costFor('video', { seconds: 5.2 }), 360); // partial second rounds up
   });
 
   it('embedding and memory ops are free (documented in lib/usage.js)', () => {

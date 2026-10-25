@@ -86,6 +86,13 @@ export default async function handler(req, res) {
   const rwGate = await meterGate({ db: getUsageDb, tenantId: resolvedTenant.tenantId, keySource: keySource, estCredits: rwEst });
   if (!rwGate.allowed) return denyMetering(res, rwGate);
 
+  // Bucket-paid (metered) requests are Turbo-only: the 60-credit/sec
+  // meter rate covers gen4_turbo's $0.05/s but NOT Gen-4.5 ($0.12/s),
+  // so a client-chosen pricier model must never ride the subscription
+  // bucket (pricing report). BYO-key requests are unmetered and keep
+  // the caller's model choice — they pay Runway directly.
+  const runwayModel = rwGate.meter ? DEFAULT_MODEL : (req.body?.model || DEFAULT_MODEL);
+
   try {
     // Runway uses text_to_video task creation.
     const startRes = await fetch('https://api.dev.runwayml.com/v1/text_to_video', {
@@ -96,7 +103,7 @@ export default async function handler(req, res) {
         'X-Runway-Version': '2024-11-06',
       },
       body: JSON.stringify({
-        model: req.body?.model || DEFAULT_MODEL,
+        model: runwayModel,
         promptText: prompt,
         promptImage: req.body?.promptImage, // image-to-video on Gen-4+
         ratio,
