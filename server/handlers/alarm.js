@@ -2,13 +2,18 @@
 //
 // Mark (ThinkinBuddy) calls this when the user says "remind me", "set an alarm",
 // "wake me up", "alert me when", etc.  The endpoint persists the alarm to Vercel
-// Blob and returns a JSON payload.  The CLIENT (index.html) polls
-// /api/alarm/pending and fires the Capacitor LocalNotifications bridge —
-// because ElevenLabs tools run server-side and can't touch the native APK layer
+// Blob and returns a JSON payload.  The CLIENT (public/alarms.js, loaded by
+// public/onboarding.js) polls /api/alarm/pending and schedules each alarm
+// on-device through the Capacitor LocalNotifications bridge — because
+// ElevenLabs tools run server-side and can't touch the native APK layer
 // directly.  Two-step handshake:
 //
 //   1. Agent tool call  →  POST /api/alarm  (server saves)
-//   2. Client poll      →  GET  /api/alarm/pending?userId=...  (client fires native alarm)
+//   2. Client sync      →  GET  /api/alarm/pending?userId=...  (pending only)
+//                          GET  /api/alarm/pending?userId=...&all=1  (every
+//                          saved entry; the client uses it to notice an
+//                          entry deleted server-side and cancel it
+//                          on-device)
 //
 // Why this split: The Capacitor LocalNotifications.schedule() call must happen
 // in the WebView JS context so it can cross the Capacitor Bridge into the native
@@ -101,15 +106,23 @@ export default async function handler(req, res) {
       alarmId:  id,
       title,
       fireAt:   fireAt.toISOString(),
-      // Mark speaks this back to the user
-      message:  `Got it — I've set a reminder for ${localTime}: "${title}".`,
+      // Mark speaks this back to the user. HONEST WORDING: this endpoint
+      // only SAVED the reminder — it may be called "set" only once the
+      // phone app has actually scheduled it on the device (public/
+      // alarms.js does that on its next sync). Never claim "set" here.
+      message:  `Got it — reminder saved for ${localTime}: "${title}". It'll ring on your phone once the app there has picked it up.`,
     });
   }
 
-  // ── GET /api/alarm/pending?userId=... — client polls, fires native alarm ──
+  // ── GET /api/alarm/pending?userId=... — client syncs, schedules on-device ──
+  // Default: only entries still pending (not yet picked up by any client).
+  // ?all=1: every saved entry, pending or delivered — the client diffs its
+  // on-device record against this list to cancel alarms that were deleted
+  // server-side. Response shape is the same either way.
   if (req.method === 'GET') {
     const userId = (typeof req.query?.userId === 'string' && req.query.userId)
       ? req.query.userId : 'troy';
+    const wantAll = req.query?.all === '1' || req.query?.all === 'true';
 
     let pending = [];
     try {
@@ -118,7 +131,7 @@ export default async function handler(req, res) {
         blobs.map(b => fetch(b.url).then(r => r.json()).catch(() => null))
       );
       pending = entries
-        .filter(e => e && e.pending === true)
+        .filter(e => e && (wantAll || e.pending === true))
         .sort((a, b) => a.id - b.id);
     } catch (e) {
       console.error('[alarm] list failed:', e?.message || e);

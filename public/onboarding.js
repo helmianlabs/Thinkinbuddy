@@ -123,6 +123,19 @@ async function wireBilling(tenantId) {
   } catch { /* billing is optional at sign-in time; swallow everything */ }
 }
 
+// ─── Alarm sync hook (never allowed to break sign-in) ──────────────
+// Same pattern as wireBilling: the phone-powers module (public/alarms.js)
+// schedules server-saved alarms on THIS device. Started after sign-in,
+// at boot for an existing session, and in legacy mode (legacy alarms are
+// the original single-user flow). Repeat calls just re-sync.
+
+async function wireAlarms() {
+  try {
+    const { startAlarmSync } = await import('./alarms.js');
+    await startAlarmSync();
+  } catch { /* alarms are optional at sign-in time; swallow everything */ }
+}
+
 // ─── Overlay (auth + onboarding steps) ──────────────────────────────────
 
 const overlayEl = () => document.getElementById('accountOverlay');
@@ -199,6 +212,7 @@ function showAuth() {
       if ((result.status === 200 || result.status === 201) && result.data?.token) {
         storeSession(result.data.token, result.data.tenantId);
         await wireBilling(result.data.tenantId);
+        await wireAlarms();
         let prof = null;
         try { prof = await api('/api/profile'); } catch { prof = null; }
         if (prof && isAccountsOff(prof)) { enterLegacyMode(); return; }
@@ -349,6 +363,7 @@ function enterLegacyMode() {
   accountsMode = false;
   hideOverlay();
   hideAccountPane();
+  wireAlarms();
 }
 
 async function refreshAccountPane(force = false) {
@@ -559,6 +574,7 @@ async function init() {
     accountsMode = true;
     profileCache = prof.data;
     await wireBilling(getTenantId() || prof.data?.tenantId);
+    await wireAlarms();
     refreshAccountPane();
     if (!prof.data?.display_name) showOnboarding();
     return;
