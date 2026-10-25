@@ -194,14 +194,49 @@ micBtn.addEventListener('click', async () => {
   }
 });
 
-function handleAudioChunks(mimeType) {
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function handleAudioChunks(mimeType) {
   const blob = new Blob(chunks, { type: mimeType });
-  const reader = new FileReader();
-  reader.onloadend = () => {
-    const base64 = reader.result.split(',')[1];
-    submitEntry({ audioBase64: base64, mimeType });
-  };
-  reader.readAsDataURL(blob);
+  // Whisper Bite 2: the capture switch (public/capture-stt.js). Flag ON
+  // + engine ready → the phone transcribes and we post { text }; flag
+  // OFF / engine unavailable / on-device failure → today's cloud audio
+  // post, LABELLED in the status line — never a silent switch.
+  try {
+    const { buildCapturePost } = await import('./capture-stt.js');
+    const post = await buildCapturePost(blob, {
+      mimeType,
+      encodeAudio: blobToBase64,
+      onProgress: (p) => {
+        if (p && p.fraction != null) setStatus(`Downloading on-device model… ${Math.round(p.fraction * 100)}%`);
+      },
+    });
+    if (post.via === 'on_device') {
+      // The transcript lands in the textarea (visible, editable) and is
+      // posted as text — the handler prefers text and skips the cloud
+      // transcription call entirely.
+      textInput.value = post.payload.text;
+      setStatus('Heard on this device ✓ — logging…');
+    } else {
+      setStatus(post.label);
+    }
+    submitEntry(post.payload);
+  } catch (e) {
+    console.warn('[diary] capture switch failed — cloud transcription:', e);
+    setStatus('Sending audio for cloud transcription…');
+    try {
+      submitEntry({ audioBase64: await blobToBase64(blob), mimeType });
+    } catch (err) {
+      setStatus('Error: ' + err.message, 'err');
+    }
+  }
 }
 
 submitBtn.addEventListener('click', () => {

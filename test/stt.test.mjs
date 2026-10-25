@@ -13,8 +13,11 @@
 //   2. Static contract checks: the worker installs its message handler
 //      before any dynamic import, loads the bundled (non-.web)
 //      Transformers build, sets the ONNX wasm paths explicitly, uses
-//      the Cache API; the flag defaults OFF; and no shipped page
-//      references the module (Bites 2/4 do the wiring, not this bite).
+//      the Cache API; the flag defaults OFF; and (at Bite 1) no shipped
+//      page references the module. The boundary pin at the bottom was
+//      updated by Bite 2: the Diary pages now wire the capture switch
+//      (public/capture-stt.js); index/onboarding stay unwired until
+//      Bite 4.
 //
 // NOT covered here (nothing in this environment can cover it): a real
 // Whisper model transcribing on a real phone. The fake port plays the
@@ -403,8 +406,15 @@ test('module defaults name the bundled build from the pinned transformers versio
   assert.ok(!sttJs.includes('transformers.web.min.js"') && !sttJs.includes("transformers.web.min.js'"));
 });
 
-test('BITE BOUNDARY: no shipped page wires the STT module in yet', () => {
-  for (const [name, src] of [['index.html', indexHtml], ['onboarding.js', onboardingJs], ['public/diary.html', diaryHtml], ['diary.html', rootDiaryHtml]]) {
-    assert.ok(!src.includes('stt.js') && !src.includes('stt-worker'), `${name} must not reference the STT module in Bite 1`);
+test('BITE BOUNDARY (updated in Bite 2): Diary pages wire the capture switch; index/onboarding do not wire STT', () => {
+  for (const [name, src] of [['index.html', indexHtml], ['onboarding.js', onboardingJs]]) {
+    assert.ok(
+      !src.includes('stt.js') && !src.includes('stt-worker') && !src.includes('capture-stt'),
+      `${name} must not reference the STT modules yet (browser-voice swap is Bite 4)`,
+    );
+  }
+  for (const [name, src] of [['public/diary.html', diaryHtml], ['diary.html', rootDiaryHtml]]) {
+    assert.ok(src.includes('capture-stt'), `${name} wires the capture switch since Bite 2`);
+    assert.ok(!src.includes('stt-worker'), `${name} never references the worker directly`);
   }
 });
